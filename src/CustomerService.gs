@@ -57,7 +57,10 @@ function getCustomers() {
   if (data.length < 2) return [];
 
   var colMap = buildColumnMap_(data[0]);
-  var missing = ['customerName', 'fiscalMonth'].filter(function (f) { return colMap[f] === undefined; });
+  var missing = ['customerName'].filter(function (f) { return colMap[f] === undefined; });
+  if (colMap.fiscalMonth === undefined && colMap.fiscalDate === undefined) {
+    missing.push('fiscalMonth または fiscalDate');
+  }
   if (missing.length) {
     throw new Error(
       '顧客シートに必要な列が見つかりません: ' + missing.join(', ') +
