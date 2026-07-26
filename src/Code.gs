@@ -21,11 +21,16 @@ var CASE_STATUS_SEVERITY = { normal: 0, warning: 1, delayed: 2 };
  * Assembles everything the dashboard needs in one call: every customer's
  * current fiscal cycle, its generated tasks, and computed status colors.
  * Called from the client on load and after any sync/edit action.
+ *
+ * `referenceDateIso` (optional, "yyyy-MM-dd") lets the caller evaluate
+ * every status as of a date other than today - e.g. to check "would this
+ * case already be in the warning zone a month from now?". Defaults to
+ * today when omitted or unparseable.
  */
-function getDashboardData() {
+function getDashboardData(referenceDateIso) {
   var customers = getCustomers();
   var allTasks = getAllTaskRecords_();
-  var today = startOfDay_(new Date());
+  var today = (referenceDateIso && normalizeDate_(referenceDateIso)) || startOfDay_(new Date());
 
   var cases = customers.map(function (customer) {
     var tasks = allTasks
@@ -60,8 +65,6 @@ function getDashboardData() {
     return {
       customerId: customer.id,
       customerName: customer.customerName,
-      corporateName: customer.corporateName,
-      taxAccountant: customer.taxAccountant,
       staff: customer.staff,
       fiscalEndDate: customer.fiscalEndDateIso,
       status: caseStatus,
@@ -72,7 +75,7 @@ function getDashboardData() {
   cases.sort(function (a, b) { return a.fiscalEndDate < b.fiscalEndDate ? -1 : 1; });
 
   return {
-    generatedAt: toIsoDateString_(today),
+    referenceDate: toIsoDateString_(today),
     caseCount: cases.length,
     cases: cases
   };
@@ -82,16 +85,16 @@ function getDashboardData() {
  * Generates any missing tasks for customers on their current fiscal
  * cycle, then returns the refreshed dashboard data.
  */
-function runSyncAndGetDashboardData() {
+function runSyncAndGetDashboardData(referenceDateIso) {
   syncTasksFromCustomers();
-  return getDashboardData();
+  return getDashboardData(referenceDateIso);
 }
 
 /**
  * Applies an edit made from the dashboard UI to a single task, then
  * returns the refreshed dashboard data so the client can re-render.
  */
-function saveTaskUpdate(taskId, updates) {
+function saveTaskUpdate(taskId, updates, referenceDateIso) {
   updateTask(taskId, updates);
-  return getDashboardData();
+  return getDashboardData(referenceDateIso);
 }

@@ -89,8 +89,6 @@ function getCustomers() {
       id: 'row' + (i + 1),
       rowIndex: i + 1,
       customerName: customerName,
-      corporateName: String(readCell_(row, colMap, 'corporateName') || '').trim(),
-      taxAccountant: String(readCell_(row, colMap, 'taxAccountant') || '').trim(),
       staff: String(readCell_(row, colMap, 'staff') || '').trim(),
       fiscalEndDate: fiscalEndDate,
       fiscalEndDateIso: toIsoDateString_(fiscalEndDate)

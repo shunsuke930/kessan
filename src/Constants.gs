@@ -34,11 +34,9 @@ var CONFIG = {
 // (see 要件定義書 7. 次のステップ). Add aliases here if the real sheet
 // uses different wording.
 var CUSTOMER_COLUMN_ALIASES = {
-  customerName: ['顧客名'],
-  corporateName: ['法人名', '会社名'],
+  customerName: ['顧客名', '法人名', '会社名'],
   fiscalMonth: ['決算月'],
   fiscalDate: ['決算日'],
-  taxAccountant: ['担当税理士'],
   staff: ['担当者']
 };
 

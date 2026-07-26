@@ -3,18 +3,31 @@
   var latestData = null;
 
   document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
     load();
     document.getElementById('syncButton').addEventListener('click', onSync);
+    document.getElementById('referenceDateInput').addEventListener('change', load);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
   });
+
+  function toLocalIsoDate(date) {
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1).padStart(2, '0');
+    var d = String(date.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function getReferenceDate() {
+    return document.getElementById('referenceDateInput').value || '';
+  }
 
   function load() {
     setLoading(true);
     google.script.run
       .withSuccessHandler(onDataLoaded)
       .withFailureHandler(onError)
-      .getDashboardData();
+      .getDashboardData(getReferenceDate());
   }
 
   function onSync() {
@@ -22,7 +35,7 @@
     google.script.run
       .withSuccessHandler(onDataLoaded)
       .withFailureHandler(onError)
-      .runSyncAndGetDashboardData();
+      .runSyncAndGetDashboardData(getReferenceDate());
   }
 
   function onDataLoaded(data) {
@@ -44,7 +57,7 @@
   }
 
   function render(data) {
-    document.getElementById('generatedAt').textContent = '最終更新: ' + data.generatedAt + '（' + data.caseCount + '件）';
+    document.getElementById('referenceDateLabel').textContent = '基準日: ' + data.referenceDate + '（' + data.caseCount + '件）';
     renderSummary(data.cases);
     renderCaseList(data.cases);
   }
@@ -58,9 +71,7 @@
       tr.addEventListener('click', function () { scrollToCase(c.customerId); });
       tr.innerHTML =
         '<td>' + escapeHtml(c.customerName) + '</td>' +
-        '<td>' + escapeHtml(c.corporateName) + '</td>' +
         '<td>' + escapeHtml(c.fiscalEndDate) + '</td>' +
-        '<td>' + escapeHtml(c.taxAccountant) + '</td>' +
         '<td>' + escapeHtml(c.staff) + '</td>' +
         '<td><span class="status-badge ' + c.status + '">' + STATUS_LABEL[c.status] + '</span></td>';
       body.appendChild(tr);
@@ -84,13 +95,13 @@
       var header = document.createElement('div');
       header.className = 'case-card-header';
       header.innerHTML =
-        '<h3>' + escapeHtml(c.customerName) + (c.corporateName ? '（' + escapeHtml(c.corporateName) + '）' : '') + '</h3>' +
+        '<h3>' + escapeHtml(c.customerName) + '</h3>' +
         '<span class="status-badge ' + c.status + '">' + STATUS_LABEL[c.status] + '</span>';
       card.appendChild(header);
 
       var meta = document.createElement('div');
       meta.className = 'case-meta';
-      meta.textContent = '決算日: ' + c.fiscalEndDate + ' ／ 担当税理士: ' + (c.taxAccountant || '-') + ' ／ 担当者: ' + (c.staff || '-');
+      meta.textContent = '決算日: ' + c.fiscalEndDate + ' ／ 担当者: ' + (c.staff || '-');
       card.appendChild(meta);
 
       var ganttContainer = document.createElement('div');
@@ -184,7 +195,7 @@
     google.script.run
       .withSuccessHandler(onDataLoaded)
       .withFailureHandler(onError)
-      .saveTaskUpdate(taskId, updates);
+      .saveTaskUpdate(taskId, updates, getReferenceDate());
   }
 
   function escapeHtml(value) {
