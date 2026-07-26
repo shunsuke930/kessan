@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>決算対応ダッシュボード</h1>
+      <p id="generatedAt" class="muted"></p>
+    </div>
+    <div class="header-actions">
+      <div class="legend">
+        <span class="legend-item"><i class="dot dot-normal"></i>通常</span>
+        <span class="legend-item"><i class="dot dot-warning"></i>要注意</span>
+        <span class="legend-item"><i class="dot dot-delayed"></i>遅延</span>
+      </div>
+      <button id="syncButton" class="btn btn-primary">スプレッドシートと同期</button>
+    </div>
+  </header>
+
+  <div id="loading" class="loading">読み込み中...</div>
+  <div id="errorBox" class="error-box" style="display:none;"></div>
+
+  <main id="app" style="display:none;">
+    <section class="summary">
+      <table id="summaryTable">
+        <thead>
+          <tr>
+            <th>顧客名</th>
+            <th>法人名</th>
+            <th>決算日</th>
+            <th>担当税理士</th>
+            <th>担当者</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody id="summaryTableBody"></tbody>
+      </table>
+    </section>
+
+    <section id="caseList" class="case-list"></section>
+  </main>
+
+  <div id="editModal" class="modal-backdrop" style="display:none;">
+    <div class="modal">
+      <h2 id="editModalTitle">タスク編集</h2>
+      <label>タスク名
+        <input type="text" id="editTaskName">
+      </label>
+      <div class="field-row">
+        <label>開始日
+          <input type="date" id="editPlannedStart">
+        </label>
+        <label>期限日
+          <input type="date" id="editPlannedEnd">
+        </label>
+      </div>
+      <div class="field-row">
+        <label>進捗
+          <select id="editProgressStatus">
+            <option value="未着手">未着手</option>
+            <option value="対応中">対応中</option>
+            <option value="完了">完了</option>
+          </select>
+        </label>
+        <label>ステータス手動指定
+          <select id="editManualOverride">
+            <option value="">自動判定</option>
+            <option value="normal">通常（グレー）</option>
+            <option value="warning">要注意（黄色）</option>
+            <option value="delayed">遅延（赤）</option>
+          </select>
+        </label>
+      </div>
+      <label>メモ
+        <textarea id="editNotes" rows="3"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="cancelEditButton" class="btn">キャンセル</button>
+        <button id="saveEditButton" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.umd.js"></script>
+  <?!= include('JavaScript'); ?>
+</body>
+</html>
