@@ -15,8 +15,6 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-var CASE_STATUS_SEVERITY = { normal: 0, warning: 1, delayed: 2 };
-
 /**
  * Assembles everything the dashboard needs in one call: every customer's
  * current fiscal cycle, its generated tasks, and computed status colors.
@@ -55,19 +53,12 @@ function getDashboardData(referenceDateIso) {
       };
     });
 
-    var caseStatus = computeCaseStatus_(customer.fiscalEndDate, today);
-    taskViews.forEach(function (tv) {
-      if (CASE_STATUS_SEVERITY[tv.status] > CASE_STATUS_SEVERITY[caseStatus]) {
-        caseStatus = tv.status;
-      }
-    });
-
     return {
       customerId: customer.id,
       customerName: customer.customerName,
       staff: customer.staff,
       fiscalEndDate: customer.fiscalEndDateIso,
-      status: caseStatus,
+      status: computeCaseStatus_(customer.fiscalEndDate, today),
       tasks: taskViews
     };
   });

@@ -1,6 +1,7 @@
 <script>
   var STATUS_LABEL = { normal: '通常', warning: '要注意', delayed: '遅延' };
   var latestData = null;
+  var latestAnnualData = null;
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
@@ -10,6 +11,7 @@
     document.getElementById('syncButton').addEventListener('click', onSync);
     document.getElementById('referenceDateInput').addEventListener('change', load);
     document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
+    document.getElementById('staffFilter').addEventListener('change', applyFilter);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
   });
@@ -61,8 +63,42 @@
 
   function render(data) {
     document.getElementById('referenceDateLabel').textContent = '基準日: ' + data.referenceDate + '（' + data.caseCount + '件）';
-    renderSummary(data.cases);
-    renderCaseList(data.cases);
+    populateStaffFilter(data.cases);
+    applyFilter();
+  }
+
+  function getSelectedStaff() {
+    return document.getElementById('staffFilter').value || '';
+  }
+
+  function populateStaffFilter(cases) {
+    var select = document.getElementById('staffFilter');
+    var previous = select.value;
+    var staffSet = {};
+    cases.forEach(function (c) { if (c.staff) staffSet[c.staff] = true; });
+    var staffNames = Object.keys(staffSet).sort();
+
+    select.innerHTML = '<option value="">すべての担当者</option>' +
+      staffNames.map(function (s) {
+        return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
+      }).join('');
+    if (staffNames.indexOf(previous) !== -1) select.value = previous;
+  }
+
+  function getFilteredCases() {
+    if (!latestData) return [];
+    var staff = getSelectedStaff();
+    if (!staff) return latestData.cases;
+    return latestData.cases.filter(function (c) { return c.staff === staff; });
+  }
+
+  function applyFilter() {
+    var filtered = getFilteredCases();
+    document.getElementById('filteredCountLabel').textContent =
+      latestData ? filtered.length + ' / ' + latestData.cases.length + ' 件を表示中' : '';
+    renderSummary(filtered);
+    renderCaseList(filtered);
+    renderFilteredAnnualGantt();
   }
 
   function renderSummary(cases) {
@@ -146,16 +182,33 @@
   function loadAnnualView() {
     var year = document.getElementById('annualYearInput').value || new Date().getFullYear();
     google.script.run
-      .withSuccessHandler(renderAnnualGantt)
+      .withSuccessHandler(onAnnualDataLoaded)
       .withFailureHandler(onError)
       .getAnnualCalendarData(year);
   }
 
-  function renderAnnualGantt(data) {
+  function onAnnualDataLoaded(data) {
+    latestAnnualData = data;
+    renderFilteredAnnualGantt();
+  }
+
+  function renderFilteredAnnualGantt() {
+    if (!latestAnnualData) return;
+
+    var staff = getSelectedStaff();
+    var rows = latestAnnualData.rows;
+    if (staff && latestData) {
+      var allowedCustomerIds = {};
+      latestData.cases.forEach(function (c) {
+        if (c.staff === staff) allowedCustomerIds[c.customerId] = true;
+      });
+      rows = rows.filter(function (r) { return allowedCustomerIds[r.customerId]; });
+    }
+
     var container = document.getElementById('annualGanttContainer');
     container.innerHTML = '';
 
-    var tasks = data.milestones.concat(data.rows).map(function (item) {
+    var tasks = latestAnnualData.milestones.concat(rows).map(function (item) {
       return {
         id: item.id,
         name: item.name,

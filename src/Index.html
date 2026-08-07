@@ -28,6 +28,15 @@
   <div id="errorBox" class="error-box" style="display:none;"></div>
 
   <main id="app" style="display:none;">
+    <section class="filter-bar">
+      <label class="staff-filter-field">担当者で絞り込み
+        <select id="staffFilter">
+          <option value="">すべての担当者</option>
+        </select>
+      </label>
+      <span id="filteredCountLabel" class="muted"></span>
+    </section>
+
     <section class="annual-section">
       <div class="annual-section-header">
         <h2>年間カレンダー</h2>
