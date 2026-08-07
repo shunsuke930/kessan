@@ -96,9 +96,53 @@
     var filtered = getFilteredCases();
     document.getElementById('filteredCountLabel').textContent =
       latestData ? filtered.length + ' / ' + latestData.cases.length + ' 件を表示中' : '';
+    renderActionPanel(filtered);
     renderSummary(filtered);
     renderCaseList(filtered);
     renderFilteredAnnualGantt();
+  }
+
+  /**
+   * "対応が必要なタスク": every non-completed task across the (filtered)
+   * cases that is currently 要注意 or 遅延, soonest deadline first. Gives
+   * a single at-a-glance to-do list instead of having to open every case
+   * card to find what needs attention.
+   */
+  function renderActionPanel(cases) {
+    var actionable = [];
+    cases.forEach(function (c) {
+      c.tasks.forEach(function (t) {
+        if (t.progressStatus === '完了') return;
+        if (t.status !== 'warning' && t.status !== 'delayed') return;
+        actionable.push({
+          customerName: c.customerName,
+          taskId: t.taskId,
+          taskName: t.name,
+          end: t.end,
+          progressStatus: t.progressStatus,
+          status: t.status
+        });
+      });
+    });
+    actionable.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
+
+    var body = document.getElementById('actionTableBody');
+    body.innerHTML = '';
+    document.getElementById('actionEmptyState').style.display = actionable.length ? 'none' : 'block';
+    document.getElementById('actionTable').style.display = actionable.length ? '' : 'none';
+
+    actionable.forEach(function (item) {
+      var tr = document.createElement('tr');
+      tr.className = 'clickable-row action-row';
+      tr.addEventListener('click', function () { openEditModal(item.taskId); });
+      tr.innerHTML =
+        '<td>' + escapeHtml(item.customerName) + '</td>' +
+        '<td>' + escapeHtml(item.taskName) + '</td>' +
+        '<td>' + escapeHtml(item.end) + '</td>' +
+        '<td>' + escapeHtml(item.progressStatus) + '</td>' +
+        '<td><span class="status-badge ' + item.status + '">' + STATUS_LABEL[item.status] + '</span></td>';
+      body.appendChild(tr);
+    });
   }
 
   function renderSummary(cases) {
@@ -172,11 +216,16 @@
       };
     });
 
-    new Gantt('#' + containerId, ganttTasks, {
-      view_mode: 'Week',
-      language: 'ja',
-      on_click: function (task) { openEditModal(task.id); }
-    });
+    try {
+      new Gantt('#' + containerId, ganttTasks, {
+        view_mode: 'Week',
+        on_click: function (task) { openEditModal(task.id); }
+      });
+    } catch (e) {
+      console.error('Gantt render failed', e);
+      document.getElementById(containerId).innerHTML =
+        '<p class="muted">ガントチャートの表示に失敗しました: ' + escapeHtml(e.message) + '</p>';
+    }
   }
 
   function loadAnnualView() {
@@ -224,10 +273,12 @@
       return;
     }
 
-    new Gantt('#annualGanttContainer', tasks, {
-      view_mode: 'Month',
-      language: 'ja'
-    });
+    try {
+      new Gantt('#annualGanttContainer', tasks, { view_mode: 'Month' });
+    } catch (e) {
+      console.error('Annual gantt render failed', e);
+      container.innerHTML = '<p class="muted">年間カレンダーの表示に失敗しました: ' + escapeHtml(e.message) + '</p>';
+    }
   }
 
   function scrollToCase(customerId) {

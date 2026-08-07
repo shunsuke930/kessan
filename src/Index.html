@@ -37,6 +37,24 @@
       <span id="filteredCountLabel" class="muted"></span>
     </section>
 
+    <section class="action-section">
+      <h2>対応が必要なタスク</h2>
+      <p class="muted">期限が迫っている・過ぎているのに未完了のタスクを、期限の近い順に表示します。</p>
+      <table id="actionTable">
+        <thead>
+          <tr>
+            <th>顧客名</th>
+            <th>タスク</th>
+            <th>期限</th>
+            <th>進捗</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody id="actionTableBody"></tbody>
+      </table>
+      <p id="actionEmptyState" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
+    </section>
+
     <section class="annual-section">
       <div class="annual-section-header">
         <h2>年間カレンダー</h2>
@@ -111,7 +129,7 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.umd.js"></script>
+  <script src="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
   <?!= include('JavaScript'); ?>
 </body>
 </html>
