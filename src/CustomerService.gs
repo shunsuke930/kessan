@@ -82,14 +82,17 @@ function getCustomers() {
     var fiscalDateRaw = readCell_(row, colMap, 'fiscalDate');
     var fiscalMonthRaw = readCell_(row, colMap, 'fiscalMonth');
 
-    var fiscalEndDate = resolveFiscalYearEnd_(fiscalDateRaw, fiscalMonthRaw, today);
-    if (!fiscalEndDate) continue;
+    var monthDay = resolveFiscalMonthDay_(fiscalDateRaw, fiscalMonthRaw, today);
+    if (!monthDay) continue;
+    var fiscalEndDate = nextFiscalYearEnd_(monthDay.month, monthDay.day, today);
 
     customers.push({
       id: 'row' + (i + 1),
       rowIndex: i + 1,
       customerName: customerName,
       staff: String(readCell_(row, colMap, 'staff') || '').trim(),
+      fiscalMonth: monthDay.month,
+      fiscalDay: monthDay.day,
       fiscalEndDate: fiscalEndDate,
       fiscalEndDateIso: toIsoDateString_(fiscalEndDate)
     });
@@ -99,24 +102,20 @@ function getCustomers() {
 }
 
 /**
- * Resolves the fiscal year-end date to use for scheduling. Prefers an
- * explicit 決算日 value; falls back to the last day of 決算月 for the
- * nearest upcoming occurrence when only the month is given.
+ * Resolves the fiscal year-end month/day to use for scheduling. Prefers
+ * an explicit 決算日 value; falls back to the last day of 決算月 when
+ * only the month is given. Kept independent of any particular calendar
+ * year so callers can place it in whichever year they need (the nearest
+ * upcoming occurrence for task generation, or a specific year for the
+ * annual calendar view).
  */
-function resolveFiscalYearEnd_(fiscalDateRaw, fiscalMonthRaw, today) {
+function resolveFiscalMonthDay_(fiscalDateRaw, fiscalMonthRaw, today) {
   var explicitDate = normalizeDate_(fiscalDateRaw);
-  var month;
-  var day;
-
   if (explicitDate) {
-    month = explicitDate.getMonth() + 1;
-    day = explicitDate.getDate();
-  } else {
-    var monthNum = parseInt(fiscalMonthRaw, 10);
-    if (!monthNum || monthNum < 1 || monthNum > 12) return null;
-    month = monthNum;
-    day = new Date(today.getFullYear(), month, 0).getDate(); // last day of that month
+    return { month: explicitDate.getMonth() + 1, day: explicitDate.getDate() };
   }
 
-  return nextFiscalYearEnd_(month, day, today);
+  var monthNum = parseInt(fiscalMonthRaw, 10);
+  if (!monthNum || monthNum < 1 || monthNum > 12) return null;
+  return { month: monthNum, day: new Date(today.getFullYear(), monthNum, 0).getDate() };
 }

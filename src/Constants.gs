@@ -60,3 +60,17 @@ var CASE_STATUS = {
   WARNING: 'warning',
   DELAYED: 'delayed'
 };
+
+// Reference milestones shown at the top of the annual calendar view
+// (AnnualService.gs). These are general, commonly-applicable compliance
+// deadlines for Japanese corporations - actual dates vary by company
+// (headcount, insurance union, individual fiscal year, etc.), so treat
+// them as a rough orientation guide, not an authoritative deadline list.
+var ANNUAL_MILESTONES = [
+  { key: 'hotei_chosho', name: '法定調書・給与支払報告書 提出期限', startMonth: 1, startDay: 31, endMonth: 1, endDay: 31 },
+  { key: 'shokyaku_shisan', name: '固定資産税(償却資産)申告期限', startMonth: 1, startDay: 31, endMonth: 1, endDay: 31 },
+  { key: 'rodohoken_koshin', name: '労働保険 年度更新', startMonth: 6, startDay: 1, endMonth: 7, endDay: 10 },
+  { key: 'santei_kiso', name: '社会保険 算定基礎届', startMonth: 7, startDay: 1, endMonth: 7, endDay: 10 },
+  { key: 'chukan_nofu_example', name: '法人税等 中間納付（3月決算の場合の目安）', startMonth: 10, startDay: 1, endMonth: 11, endDay: 30 },
+  { key: 'nenmatsu_chosei', name: '年末調整', startMonth: 11, startDay: 1, endMonth: 12, endDay: 31 }
+];

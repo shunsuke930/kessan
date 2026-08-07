@@ -5,6 +5,9 @@
     --color-delayed: #e53935;
     --color-bg: #f7f8fa;
     --color-border: #e0e2e5;
+    --color-prep: #4a90d9;
+    --color-settlement: #e58e26;
+    --color-milestone: #8a6fd6;
   }
 
   * { box-sizing: border-box; }
@@ -38,6 +41,9 @@
   .dot-normal { background: var(--color-normal); }
   .dot-warning { background: var(--color-warning); }
   .dot-delayed { background: var(--color-delayed); }
+  .dot-prep { background: var(--color-prep); }
+  .dot-settlement { background: var(--color-settlement); }
+  .dot-milestone { background: var(--color-milestone); }
 
   .reference-date-field {
     display: flex;
@@ -116,6 +122,36 @@
   .gantt .bar-wrapper.status-delayed .bar { fill: var(--color-delayed); }
   .gantt .bar-wrapper.status-warning .bar-progress { fill: #c68f00; }
   .gantt .bar-wrapper.status-delayed .bar-progress { fill: #a52a20; }
+
+  .annual-section {
+    margin-bottom: 28px;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .annual-section-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+  .annual-section-header h2 { font-size: 16px; margin: 0; }
+  .year-field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #444; }
+  .year-field input {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .annual-note { margin-bottom: 10px; }
+
+  /* Frappe Gantt bar coloring for the annual calendar view */
+  .annual-gantt .bar-wrapper.type-milestone .bar { fill: var(--color-milestone); }
+  .annual-gantt .bar-wrapper.type-prep .bar { fill: var(--color-prep); }
+  .annual-gantt .bar-wrapper.type-settlement .bar { fill: var(--color-settlement); }
 
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4);

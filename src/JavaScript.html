@@ -4,9 +4,12 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
+    document.getElementById('annualYearInput').value = new Date().getFullYear();
     load();
+    loadAnnualView();
     document.getElementById('syncButton').addEventListener('click', onSync);
     document.getElementById('referenceDateInput').addEventListener('change', load);
+    document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
   });
@@ -137,6 +140,40 @@
       view_mode: 'Week',
       language: 'ja',
       on_click: function (task) { openEditModal(task.id); }
+    });
+  }
+
+  function loadAnnualView() {
+    var year = document.getElementById('annualYearInput').value || new Date().getFullYear();
+    google.script.run
+      .withSuccessHandler(renderAnnualGantt)
+      .withFailureHandler(onError)
+      .getAnnualCalendarData(year);
+  }
+
+  function renderAnnualGantt(data) {
+    var container = document.getElementById('annualGanttContainer');
+    container.innerHTML = '';
+
+    var tasks = data.milestones.concat(data.rows).map(function (item) {
+      return {
+        id: item.id,
+        name: item.name,
+        start: item.start,
+        end: item.end,
+        progress: 0,
+        custom_class: 'type-' + item.type
+      };
+    });
+
+    if (!tasks.length) {
+      container.innerHTML = '<p class="muted">表示するデータがありません。顧客データを確認するか、「スプレッドシートと同期」をお試しください。</p>';
+      return;
+    }
+
+    new Gantt('#annualGanttContainer', tasks, {
+      view_mode: 'Month',
+      language: 'ja'
     });
   }
 

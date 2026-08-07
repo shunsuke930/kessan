@@ -9,11 +9,12 @@
 ```
 src/
   appsscript.json      GASマニフェスト（Webアプリ設定）
-  Constants.gs          設定・タスクテンプレート・色分け閾値
+  Constants.gs          設定・タスクテンプレート・色分け閾値・年間マイルストン定義
   DateUtils.gs          日付ユーティリティ
   CustomerService.gs    顧客マスタシートの読み取り（読み取り専用）
   TaskService.gs        タスク用シートのCRUD・テンプレートからの自動生成
   StatusService.gs      通常/要注意/遅延の判定ロジック
+  AnnualService.gs       年間カレンダービュー（準備期間/決算期間/マイルストン）のデータ生成
   Code.gs                doGet、クライアントから呼ばれる関数群
   Index.html / Stylesheet.html / JavaScript.html
                          ダッシュボードUI（Frappe Ganttでガントチャート表示）
@@ -105,6 +106,15 @@ clasp deploy --description "初回デプロイ"
   要注意になるか事前確認する、など）。未指定時は実際の今日の日付を使う。
   `getDashboardData` / `runSyncAndGetDashboardData` / `saveTaskUpdate`（`Code.gs`）が
   それぞれ `referenceDateIso` 引数を受け取る。
+- **年間カレンダービュー**（`AnnualService.gs`）: ダッシュボード最上部に、指定した年
+  （1/1〜12/31、既定は今年）を1画面で見渡せるガントチャートを表示する。
+  - 顧客ごとに「準備期間」（決算日を含む2ヶ月間。例: 8月末決算なら7月〜8月末）と
+    「決算期間」（決算日の直後2ヶ月間。例: 9月〜10月末）をそれぞれ別の色のバーで表示する。
+  - 年の範囲をまたぐ期間は表示年の1/1〜12/31にクリップされる（例えば12月決算の
+    準備期間は前年11月分にあたるが、表示上は当年1/1からになる）。
+  - チャート上部には、法定調書・算定基礎届・年末調整など、法人が一般的に対応する
+    行事をマイルストンとして参考表示する（`Constants.gs` の `ANNUAL_MILESTONES`）。
+    ただし実際の期限は企業ごとに異なるため、あくまで目安。
 
 ## ローカル開発
 

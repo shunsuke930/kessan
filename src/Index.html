@@ -28,6 +28,22 @@
   <div id="errorBox" class="error-box" style="display:none;"></div>
 
   <main id="app" style="display:none;">
+    <section class="annual-section">
+      <div class="annual-section-header">
+        <h2>年間カレンダー</h2>
+        <label class="year-field">対象年
+          <input type="number" id="annualYearInput" step="1">
+        </label>
+        <div class="legend">
+          <span class="legend-item"><i class="dot dot-milestone"></i>一般的なマイルストン</span>
+          <span class="legend-item"><i class="dot dot-prep"></i>準備期間（決算日の2ヶ月前〜）</span>
+          <span class="legend-item"><i class="dot dot-settlement"></i>決算期間（決算日の2ヶ月後まで）</span>
+        </div>
+      </div>
+      <p class="muted annual-note">※マイルストンは一般的な目安です。実際の期限は個別にご確認ください。</p>
+      <div id="annualGanttContainer" class="gantt-container annual-gantt"></div>
+    </section>
+
     <section class="summary">
       <table id="summaryTable">
         <thead>
