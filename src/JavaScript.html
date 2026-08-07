@@ -1,7 +1,18 @@
 <script>
-  var STATUS_LABEL = { normal: '通常', warning: '要注意', delayed: '遅延' };
+  var TASK_CATEGORY_LABEL = {
+    pre_contact: '事前連絡',
+    bs_preparation: '資料作成',
+    return_preparation: '申告書',
+    client_approval: '確認取得',
+    filing_payment: '申告納税'
+  };
+  var STAFF_COLORS = ['#fde2e2', '#fdebc8', '#e2f0d9', '#dbeafe', '#ede9fe', '#fce7f3', '#e0f2fe', '#fef3c7'];
+  var PROGRESS_COLORS = { '未着手': '#e0e2e5', '対応中': '#fdebc8', '完了': '#2f3542' };
+  var PROGRESS_TEXT_COLORS = { '未着手': '#333', '対応中': '#7a4a00', '完了': '#fff' };
+
   var latestData = null;
   var latestAnnualData = null;
+  var actionFilters = { phase: '', customerName: '', category: '', progressStatus: '' };
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
@@ -12,9 +23,28 @@
     document.getElementById('referenceDateInput').addEventListener('change', load);
     document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
     document.getElementById('staffFilter').addEventListener('change', applyFilter);
+    document.getElementById('filterPhase').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterCustomer').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterCategory').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
   });
+
+  function onActionFilterChange() {
+    actionFilters.phase = document.getElementById('filterPhase').value;
+    actionFilters.customerName = document.getElementById('filterCustomer').value;
+    actionFilters.category = document.getElementById('filterCategory').value;
+    actionFilters.progressStatus = document.getElementById('filterStatus').value;
+    renderActionPanel(getFilteredCases());
+  }
+
+  function staffColor(name) {
+    if (!name) return '#eee';
+    var hash = 0;
+    for (var i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return STAFF_COLORS[hash % STAFF_COLORS.length];
+  }
 
   function toLocalIsoDate(date) {
     var y = date.getFullYear();
@@ -113,29 +143,29 @@
   }
 
   /**
-   * "対応が必要なタスク": for cases currently within ±2 months of the
-   * reference date (i.e. "in season"), every non-completed task that is
-   * 要注意 or 遅延, split into a 準備中 block (today is on/before 決算日)
-   * and a 決算中 block (today is after 決算日), soonest deadline first
-   * within each block.
+   * "タスク一覧": every task belonging to a case currently within ±2
+   * months of the reference date (i.e. "in season"), as one dense,
+   * spreadsheet-style table with column filters (フェーズ/クライアント名/
+   * 系統/ステータス) instead of pre-grouped blocks - closer to how the
+   * team already works in their spreadsheet. Rows are tinted by the
+   * task's computed urgency (要注意/遅延); ステータス itself is the
+   * editable progress state (未着手/対応中/完了).
    */
-  function renderActionPanel(cases) {
+  function buildActionRows(cases) {
     var referenceDate = getReferenceDate();
-    var prepItems = [];
-    var settlementItems = [];
-
+    var rows = [];
     cases.forEach(function (c) {
       if (!isInSeason(c.fiscalEndDate, referenceDate)) return;
-      var bucket = referenceDate && referenceDate <= c.fiscalEndDate ? prepItems : settlementItems;
-
+      var phase = referenceDate && referenceDate <= c.fiscalEndDate ? 'prep' : 'settlement';
       c.tasks.forEach(function (t) {
-        if (t.progressStatus === '完了') return;
-        if (t.status !== 'warning' && t.status !== 'delayed') return;
-        bucket.push({
+        rows.push({
+          phase: phase,
           customerName: c.customerName,
           staff: c.staff,
+          category: t.taskKey,
           taskId: t.taskId,
           taskName: t.name,
+          start: t.start,
           end: t.end,
           progressStatus: t.progressStatus,
           status: t.status,
@@ -143,76 +173,122 @@
         });
       });
     });
-
-    var byEndAsc = function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); };
-    prepItems.sort(byEndAsc);
-    settlementItems.sort(byEndAsc);
-
-    renderActionTable('actionTablePrep', 'actionTablePrepBody', 'actionEmptyPrep', prepItems);
-    renderActionTable('actionTableSettlement', 'actionTableSettlementBody', 'actionEmptySettlement', settlementItems);
+    return rows;
   }
 
-  function renderActionTable(tableId, bodyId, emptyId, items) {
-    var body = document.getElementById(bodyId);
+  function renderActionPanel(cases) {
+    var allRows = buildActionRows(cases);
+    populateActionFilterOptions(allRows);
+
+    var rows = allRows.filter(function (r) {
+      if (actionFilters.phase && r.phase !== actionFilters.phase) return false;
+      if (actionFilters.customerName && r.customerName !== actionFilters.customerName) return false;
+      if (actionFilters.category && r.category !== actionFilters.category) return false;
+      if (actionFilters.progressStatus && r.progressStatus !== actionFilters.progressStatus) return false;
+      return true;
+    });
+    rows.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
+
+    var body = document.getElementById('actionTableBody');
     body.innerHTML = '';
-    document.getElementById(tableId).style.display = items.length ? '' : 'none';
-    document.getElementById(emptyId).style.display = items.length ? 'none' : 'block';
+    document.getElementById('actionTable').style.display = rows.length ? '' : 'none';
+    document.getElementById('actionEmptyState').style.display = rows.length ? 'none' : 'block';
 
-    items.forEach(function (item) {
+    rows.forEach(function (r) {
       var tr = document.createElement('tr');
-      tr.className = 'action-row';
+      tr.className = r.status === 'delayed' ? 'status-row-delayed' : (r.status === 'warning' ? 'status-row-warning' : '');
 
-      var checkboxCell = document.createElement('td');
-      var checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.addEventListener('change', function () {
-        saveInlineTaskField(item.taskId, { progressStatus: checkbox.checked ? '完了' : '未着手' });
-      });
-      checkboxCell.appendChild(checkbox);
+      var phaseCell = document.createElement('td');
+      phaseCell.textContent = r.phase === 'prep' ? '準備中' : '決算中';
 
       var nameCell = document.createElement('td');
-      nameCell.textContent = item.customerName;
+      nameCell.textContent = r.customerName;
 
       var staffCell = document.createElement('td');
-      staffCell.textContent = item.staff || '-';
+      var staffChip = document.createElement('span');
+      staffChip.className = 'chip';
+      staffChip.style.background = staffColor(r.staff);
+      staffChip.textContent = r.staff || '-';
+      staffCell.appendChild(staffChip);
+
+      var categoryCell = document.createElement('td');
+      categoryCell.textContent = TASK_CATEGORY_LABEL[r.category] || r.category;
 
       var taskCell = document.createElement('td');
-      taskCell.textContent = item.taskName;
+      taskCell.textContent = r.taskName;
       taskCell.className = 'clickable-cell';
-      taskCell.addEventListener('click', function () { openEditModal(item.taskId); });
+      taskCell.title = 'クリックで期限や進捗を編集';
+      taskCell.addEventListener('click', function () { openEditModal(r.taskId); });
 
-      var endCell = document.createElement('td');
-      endCell.textContent = item.end;
+      var fromCell = document.createElement('td');
+      fromCell.textContent = r.start;
 
-      var progressCell = document.createElement('td');
-      progressCell.textContent = item.progressStatus;
+      var toCell = document.createElement('td');
+      toCell.textContent = r.end;
 
       var statusCell = document.createElement('td');
-      statusCell.innerHTML = '<span class="status-badge ' + item.status + '">' + STATUS_LABEL[item.status] + '</span>';
+      var statusSelect = document.createElement('select');
+      statusSelect.className = 'status-select';
+      ['未着手', '対応中', '完了'].forEach(function (v) {
+        var opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === r.progressStatus) opt.selected = true;
+        statusSelect.appendChild(opt);
+      });
+      applyStatusSelectColor(statusSelect, r.progressStatus);
+      statusSelect.addEventListener('change', function () {
+        applyStatusSelectColor(statusSelect, statusSelect.value);
+        saveInlineTaskField(r.taskId, { progressStatus: statusSelect.value });
+      });
+      statusCell.appendChild(statusSelect);
 
       var commentCell = document.createElement('td');
       var commentInput = document.createElement('input');
       commentInput.type = 'text';
       commentInput.className = 'comment-input';
-      commentInput.value = item.notes;
+      commentInput.value = r.notes;
       commentInput.placeholder = 'コメント';
       commentInput.addEventListener('blur', function () {
-        if (commentInput.value !== item.notes) {
-          saveInlineTaskField(item.taskId, { notes: commentInput.value });
+        if (commentInput.value !== r.notes) {
+          saveInlineTaskField(r.taskId, { notes: commentInput.value });
         }
       });
       commentCell.appendChild(commentInput);
 
-      tr.appendChild(checkboxCell);
-      tr.appendChild(nameCell);
-      tr.appendChild(staffCell);
-      tr.appendChild(taskCell);
-      tr.appendChild(endCell);
-      tr.appendChild(progressCell);
-      tr.appendChild(statusCell);
-      tr.appendChild(commentCell);
+      [phaseCell, nameCell, staffCell, categoryCell, taskCell, fromCell, toCell, statusCell, commentCell]
+        .forEach(function (td) { tr.appendChild(td); });
       body.appendChild(tr);
     });
+  }
+
+  function applyStatusSelectColor(select, value) {
+    select.style.background = PROGRESS_COLORS[value] || '#fff';
+    select.style.color = PROGRESS_TEXT_COLORS[value] || '#333';
+  }
+
+  function populateActionFilterOptions(rows) {
+    populateFilterSelect('filterCustomer', uniqueSorted(rows.map(function (r) { return r.customerName; })));
+    populateFilterSelect('filterCategory', uniqueSorted(rows.map(function (r) { return r.category; })), TASK_CATEGORY_LABEL);
+  }
+
+  function uniqueSorted(values) {
+    var seen = {};
+    var out = [];
+    values.forEach(function (v) {
+      if (v && !seen[v]) { seen[v] = true; out.push(v); }
+    });
+    return out.sort();
+  }
+
+  function populateFilterSelect(id, values, labelMap) {
+    var select = document.getElementById(id);
+    var previous = select.value;
+    select.innerHTML = '<option value="">すべて</option>' + values.map(function (v) {
+      var label = labelMap ? (labelMap[v] || v) : v;
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+    if (values.indexOf(previous) !== -1) select.value = previous;
   }
 
   function saveInlineTaskField(taskId, updates) {

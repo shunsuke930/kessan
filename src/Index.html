@@ -38,49 +38,48 @@
     </section>
 
     <section class="action-section">
-      <h2>対応が必要なタスク</h2>
-      <p class="muted">基準日の前後2ヶ月以内に決算を迎える会社の、未完了かつ要注意/遅延のタスクを、
-        決算準備中/決算中に分けて期限の近い順に表示します。</p>
+      <h2>タスク一覧</h2>
+      <p class="muted">基準日の前後2ヶ月以内に決算を迎える会社のタスクを一覧表示します。列見出し下のプルダウンで絞り込めます。</p>
 
-      <div class="action-block">
-        <h3>決算準備中の会社</h3>
-        <table id="actionTablePrep">
+      <div class="table-scroll">
+        <table id="actionTable">
           <thead>
             <tr>
-              <th>完了</th>
-              <th>顧客名</th>
+              <th>フェーズ</th>
+              <th>クライアント名</th>
               <th>担当者</th>
-              <th>タスク</th>
-              <th>期限</th>
-              <th>進捗</th>
+              <th>系統</th>
+              <th>タスク名</th>
+              <th>FROM</th>
+              <th>TO</th>
               <th>ステータス</th>
               <th>コメント</th>
             </tr>
-          </thead>
-          <tbody id="actionTablePrepBody"></tbody>
-        </table>
-        <p id="actionEmptyPrep" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
-      </div>
-
-      <div class="action-block">
-        <h3>決算中の会社</h3>
-        <table id="actionTableSettlement">
-          <thead>
-            <tr>
-              <th>完了</th>
-              <th>顧客名</th>
-              <th>担当者</th>
-              <th>タスク</th>
-              <th>期限</th>
-              <th>進捗</th>
-              <th>ステータス</th>
-              <th>コメント</th>
+            <tr class="filter-row">
+              <th><select id="filterPhase">
+                <option value="">すべて</option>
+                <option value="prep">準備中</option>
+                <option value="settlement">決算中</option>
+              </select></th>
+              <th><select id="filterCustomer"><option value="">すべて</option></select></th>
+              <th></th>
+              <th><select id="filterCategory"><option value="">すべて</option></select></th>
+              <th></th>
+              <th></th>
+              <th></th>
+              <th><select id="filterStatus">
+                <option value="">すべて</option>
+                <option value="未着手">未着手</option>
+                <option value="対応中">対応中</option>
+                <option value="完了">完了</option>
+              </select></th>
+              <th></th>
             </tr>
           </thead>
-          <tbody id="actionTableSettlementBody"></tbody>
+          <tbody id="actionTableBody"></tbody>
         </table>
-        <p id="actionEmptySettlement" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
       </div>
+      <p id="actionEmptyState" class="muted" style="display:none;">該当するタスクはありません。</p>
     </section>
 
     <section class="annual-section">
