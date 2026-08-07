@@ -39,20 +39,48 @@
 
     <section class="action-section">
       <h2>対応が必要なタスク</h2>
-      <p class="muted">期限が迫っている・過ぎているのに未完了のタスクを、期限の近い順に表示します。</p>
-      <table id="actionTable">
-        <thead>
-          <tr>
-            <th>顧客名</th>
-            <th>タスク</th>
-            <th>期限</th>
-            <th>進捗</th>
-            <th>ステータス</th>
-          </tr>
-        </thead>
-        <tbody id="actionTableBody"></tbody>
-      </table>
-      <p id="actionEmptyState" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
+      <p class="muted">基準日の前後2ヶ月以内に決算を迎える会社の、未完了かつ要注意/遅延のタスクを、
+        決算準備中/決算中に分けて期限の近い順に表示します。</p>
+
+      <div class="action-block">
+        <h3>決算準備中の会社</h3>
+        <table id="actionTablePrep">
+          <thead>
+            <tr>
+              <th>完了</th>
+              <th>顧客名</th>
+              <th>担当者</th>
+              <th>タスク</th>
+              <th>期限</th>
+              <th>進捗</th>
+              <th>ステータス</th>
+              <th>コメント</th>
+            </tr>
+          </thead>
+          <tbody id="actionTablePrepBody"></tbody>
+        </table>
+        <p id="actionEmptyPrep" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
+      </div>
+
+      <div class="action-block">
+        <h3>決算中の会社</h3>
+        <table id="actionTableSettlement">
+          <thead>
+            <tr>
+              <th>完了</th>
+              <th>顧客名</th>
+              <th>担当者</th>
+              <th>タスク</th>
+              <th>期限</th>
+              <th>進捗</th>
+              <th>ステータス</th>
+              <th>コメント</th>
+            </tr>
+          </thead>
+          <tbody id="actionTableSettlementBody"></tbody>
+        </table>
+        <p id="actionEmptySettlement" class="muted" style="display:none;">対応が必要なタスクはありません。</p>
+      </div>
     </section>
 
     <section class="annual-section">
@@ -65,27 +93,15 @@
           <span class="legend-item"><i class="dot dot-milestone"></i>一般的なマイルストン</span>
           <span class="legend-item"><i class="dot dot-prep"></i>準備期間（決算日の2ヶ月前〜）</span>
           <span class="legend-item"><i class="dot dot-settlement"></i>決算期間（決算日の2ヶ月後まで）</span>
+          <span class="legend-item"><i class="dot dot-today"></i>基準日</span>
         </div>
       </div>
-      <p class="muted annual-note">※マイルストンは一般的な目安です。実際の期限は個別にご確認ください。</p>
+      <p class="muted annual-note">
+        ※マイルストンは一般的な目安です。実際の期限は個別にご確認ください。
+        会社の行は、基準日の前後2ヶ月以内に決算を迎える会社のみ、同じ期間同士をまとめて表示します。
+      </p>
       <div id="annualGanttContainer" class="gantt-container annual-gantt"></div>
     </section>
-
-    <section class="summary">
-      <table id="summaryTable">
-        <thead>
-          <tr>
-            <th>顧客名</th>
-            <th>決算日</th>
-            <th>担当者</th>
-            <th>ステータス</th>
-          </tr>
-        </thead>
-        <tbody id="summaryTableBody"></tbody>
-      </table>
-    </section>
-
-    <section id="caseList" class="case-list"></section>
   </main>
 
   <div id="editModal" class="modal-backdrop" style="display:none;">

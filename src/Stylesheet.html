@@ -8,6 +8,7 @@
     --color-prep: #4a90d9;
     --color-settlement: #e58e26;
     --color-milestone: #8a6fd6;
+    --color-today: #e53935;
   }
 
   * { box-sizing: border-box; }
@@ -44,6 +45,7 @@
   .dot-prep { background: var(--color-prep); }
   .dot-settlement { background: var(--color-settlement); }
   .dot-milestone { background: var(--color-milestone); }
+  .dot-today { background: var(--color-today); }
 
   .reference-date-field {
     display: flex;
@@ -104,10 +106,20 @@
     padding: 16px;
   }
   .action-section h2 { font-size: 16px; margin: 0 0 4px; }
-  .action-section table { margin-top: 10px; }
-  .action-row.clickable-row:hover { background: #f2f6fc; }
+  .action-block { margin-top: 18px; }
+  .action-block:first-of-type { margin-top: 10px; }
+  .action-block h3 { font-size: 14px; margin: 0 0 6px; }
+  .action-row:hover { background: #f2f6fc; }
+  .comment-input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  td.clickable-cell { cursor: pointer; }
+  td.clickable-cell:hover { text-decoration: underline; }
 
-  .summary { margin-bottom: 28px; background: #fff; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--color-border); }
   th { background: #fafbfc; font-weight: 600; }
@@ -125,35 +137,9 @@
   .status-badge.warning { background: var(--color-warning); color: #4a3900; }
   .status-badge.delayed { background: var(--color-delayed); }
 
-  .case-list { display: flex; flex-direction: column; gap: 20px; }
-
-  .case-card {
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 16px;
-  }
-
-  .case-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-
-  .case-card-header h3 { margin: 0; font-size: 15px; }
-  .case-meta { font-size: 12px; color: #6a737d; }
-
   .gantt-container { overflow-x: auto; }
 
   .empty-state { padding: 40px; text-align: center; color: #6a737d; }
-
-  /* Frappe Gantt bar coloring by computed status */
-  .gantt .bar-wrapper.status-normal .bar { fill: var(--color-normal); }
-  .gantt .bar-wrapper.status-warning .bar { fill: var(--color-warning); }
-  .gantt .bar-wrapper.status-delayed .bar { fill: var(--color-delayed); }
-  .gantt .bar-wrapper.status-warning .bar-progress { fill: #c68f00; }
-  .gantt .bar-wrapper.status-delayed .bar-progress { fill: #a52a20; }
 
   .annual-section {
     margin-bottom: 28px;
@@ -184,6 +170,10 @@
   .annual-gantt .bar-wrapper.type-milestone .bar { fill: var(--color-milestone); }
   .annual-gantt .bar-wrapper.type-prep .bar { fill: var(--color-prep); }
   .annual-gantt .bar-wrapper.type-settlement .bar { fill: var(--color-settlement); }
+  /* Invisible marker task used only to read the reference date's pixel
+     position from frappe-gantt's own layout, then drawn as .today-line. */
+  .annual-gantt .bar-wrapper.type-today-marker { opacity: 0; pointer-events: none; }
+  .annual-gantt .today-line { stroke: var(--color-today); stroke-width: 2; }
 
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4);

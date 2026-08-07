@@ -55,6 +55,7 @@ function getAnnualCalendarData(yearInput) {
         id: 'prep_' + customer.id,
         type: 'prep',
         customerId: customer.id,
+        customerName: customer.customerName,
         name: customer.customerName + '（準備期間）',
         start: toIsoDateString_(prepStart),
         end: toIsoDateString_(prepEnd)
@@ -65,6 +66,7 @@ function getAnnualCalendarData(yearInput) {
         id: 'settlement_' + customer.id,
         type: 'settlement',
         customerId: customer.id,
+        customerName: customer.customerName,
         name: customer.customerName + '（決算期間）',
         start: toIsoDateString_(settlementStart),
         end: toIsoDateString_(settlementEnd)

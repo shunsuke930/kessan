@@ -27,6 +27,18 @@
     return document.getElementById('referenceDateInput').value || '';
   }
 
+  // "Month index" (year*12 + month) so a ±2-month window can be compared
+  // with a single integer subtraction regardless of year boundaries.
+  function monthIndex(dateIso) {
+    var d = new Date(dateIso);
+    return d.getFullYear() * 12 + d.getMonth();
+  }
+
+  function isInSeason(fiscalEndDateIso, referenceDateIso) {
+    if (!fiscalEndDateIso || !referenceDateIso) return false;
+    return Math.abs(monthIndex(fiscalEndDateIso) - monthIndex(referenceDateIso)) <= 2;
+  }
+
   function load() {
     setLoading(true);
     google.script.run
@@ -97,135 +109,118 @@
     document.getElementById('filteredCountLabel').textContent =
       latestData ? filtered.length + ' / ' + latestData.cases.length + ' 件を表示中' : '';
     renderActionPanel(filtered);
-    renderSummary(filtered);
-    renderCaseList(filtered);
     renderFilteredAnnualGantt();
   }
 
   /**
-   * "対応が必要なタスク": every non-completed task across the (filtered)
-   * cases that is currently 要注意 or 遅延, soonest deadline first. Gives
-   * a single at-a-glance to-do list instead of having to open every case
-   * card to find what needs attention.
+   * "対応が必要なタスク": for cases currently within ±2 months of the
+   * reference date (i.e. "in season"), every non-completed task that is
+   * 要注意 or 遅延, split into a 準備中 block (today is on/before 決算日)
+   * and a 決算中 block (today is after 決算日), soonest deadline first
+   * within each block.
    */
   function renderActionPanel(cases) {
-    var actionable = [];
+    var referenceDate = getReferenceDate();
+    var prepItems = [];
+    var settlementItems = [];
+
     cases.forEach(function (c) {
+      if (!isInSeason(c.fiscalEndDate, referenceDate)) return;
+      var bucket = referenceDate && referenceDate <= c.fiscalEndDate ? prepItems : settlementItems;
+
       c.tasks.forEach(function (t) {
         if (t.progressStatus === '完了') return;
         if (t.status !== 'warning' && t.status !== 'delayed') return;
-        actionable.push({
+        bucket.push({
           customerName: c.customerName,
+          staff: c.staff,
           taskId: t.taskId,
           taskName: t.name,
           end: t.end,
           progressStatus: t.progressStatus,
-          status: t.status
+          status: t.status,
+          notes: t.notes || ''
         });
       });
     });
-    actionable.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
 
-    var body = document.getElementById('actionTableBody');
+    var byEndAsc = function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); };
+    prepItems.sort(byEndAsc);
+    settlementItems.sort(byEndAsc);
+
+    renderActionTable('actionTablePrep', 'actionTablePrepBody', 'actionEmptyPrep', prepItems);
+    renderActionTable('actionTableSettlement', 'actionTableSettlementBody', 'actionEmptySettlement', settlementItems);
+  }
+
+  function renderActionTable(tableId, bodyId, emptyId, items) {
+    var body = document.getElementById(bodyId);
     body.innerHTML = '';
-    document.getElementById('actionEmptyState').style.display = actionable.length ? 'none' : 'block';
-    document.getElementById('actionTable').style.display = actionable.length ? '' : 'none';
+    document.getElementById(tableId).style.display = items.length ? '' : 'none';
+    document.getElementById(emptyId).style.display = items.length ? 'none' : 'block';
 
-    actionable.forEach(function (item) {
+    items.forEach(function (item) {
       var tr = document.createElement('tr');
-      tr.className = 'clickable-row action-row';
-      tr.addEventListener('click', function () { openEditModal(item.taskId); });
-      tr.innerHTML =
-        '<td>' + escapeHtml(item.customerName) + '</td>' +
-        '<td>' + escapeHtml(item.taskName) + '</td>' +
-        '<td>' + escapeHtml(item.end) + '</td>' +
-        '<td>' + escapeHtml(item.progressStatus) + '</td>' +
-        '<td><span class="status-badge ' + item.status + '">' + STATUS_LABEL[item.status] + '</span></td>';
-      body.appendChild(tr);
-    });
-  }
+      tr.className = 'action-row';
 
-  function renderSummary(cases) {
-    var body = document.getElementById('summaryTableBody');
-    body.innerHTML = '';
-    cases.forEach(function (c) {
-      var tr = document.createElement('tr');
-      tr.className = 'clickable-row';
-      tr.addEventListener('click', function () { scrollToCase(c.customerId); });
-      tr.innerHTML =
-        '<td>' + escapeHtml(c.customerName) + '</td>' +
-        '<td>' + escapeHtml(c.fiscalEndDate) + '</td>' +
-        '<td>' + escapeHtml(c.staff) + '</td>' +
-        '<td><span class="status-badge ' + c.status + '">' + STATUS_LABEL[c.status] + '</span></td>';
-      body.appendChild(tr);
-    });
-  }
-
-  function renderCaseList(cases) {
-    var container = document.getElementById('caseList');
-    container.innerHTML = '';
-
-    if (!cases.length) {
-      container.innerHTML = '<div class="empty-state">顧客データが見つかりません。CUSTOMER_SPREADSHEET_ID の設定と顧客シートの内容をご確認ください。</div>';
-      return;
-    }
-
-    cases.forEach(function (c) {
-      var card = document.createElement('div');
-      card.className = 'case-card';
-      card.id = 'case-' + c.customerId;
-
-      var header = document.createElement('div');
-      header.className = 'case-card-header';
-      header.innerHTML =
-        '<h3>' + escapeHtml(c.customerName) + '</h3>' +
-        '<span class="status-badge ' + c.status + '">' + STATUS_LABEL[c.status] + '</span>';
-      card.appendChild(header);
-
-      var meta = document.createElement('div');
-      meta.className = 'case-meta';
-      meta.textContent = '決算日: ' + c.fiscalEndDate + ' ／ 担当者: ' + (c.staff || '-');
-      card.appendChild(meta);
-
-      var ganttContainer = document.createElement('div');
-      ganttContainer.className = 'gantt-container';
-      var svgHost = document.createElement('div');
-      svgHost.id = 'gantt-' + c.customerId;
-      ganttContainer.appendChild(svgHost);
-      card.appendChild(ganttContainer);
-
-      container.appendChild(card);
-
-      if (c.tasks.length) {
-        renderGantt(svgHost.id, c.tasks);
-      } else {
-        svgHost.innerHTML = '<p class="muted">タスク未生成です。「スプレッドシートと同期」で生成してください。</p>';
-      }
-    });
-  }
-
-  function renderGantt(containerId, tasks) {
-    var ganttTasks = tasks.map(function (t) {
-      return {
-        id: t.taskId,
-        name: t.name,
-        start: t.start,
-        end: t.end,
-        progress: t.progressStatus === '完了' ? 100 : (t.progressStatus === '対応中' ? 50 : 0),
-        custom_class: 'status-' + t.status
-      };
-    });
-
-    try {
-      new Gantt('#' + containerId, ganttTasks, {
-        view_mode: 'Week',
-        on_click: function (task) { openEditModal(task.id); }
+      var checkboxCell = document.createElement('td');
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.addEventListener('change', function () {
+        saveInlineTaskField(item.taskId, { progressStatus: checkbox.checked ? '完了' : '未着手' });
       });
-    } catch (e) {
-      console.error('Gantt render failed', e);
-      document.getElementById(containerId).innerHTML =
-        '<p class="muted">ガントチャートの表示に失敗しました: ' + escapeHtml(e.message) + '</p>';
-    }
+      checkboxCell.appendChild(checkbox);
+
+      var nameCell = document.createElement('td');
+      nameCell.textContent = item.customerName;
+
+      var staffCell = document.createElement('td');
+      staffCell.textContent = item.staff || '-';
+
+      var taskCell = document.createElement('td');
+      taskCell.textContent = item.taskName;
+      taskCell.className = 'clickable-cell';
+      taskCell.addEventListener('click', function () { openEditModal(item.taskId); });
+
+      var endCell = document.createElement('td');
+      endCell.textContent = item.end;
+
+      var progressCell = document.createElement('td');
+      progressCell.textContent = item.progressStatus;
+
+      var statusCell = document.createElement('td');
+      statusCell.innerHTML = '<span class="status-badge ' + item.status + '">' + STATUS_LABEL[item.status] + '</span>';
+
+      var commentCell = document.createElement('td');
+      var commentInput = document.createElement('input');
+      commentInput.type = 'text';
+      commentInput.className = 'comment-input';
+      commentInput.value = item.notes;
+      commentInput.placeholder = 'コメント';
+      commentInput.addEventListener('blur', function () {
+        if (commentInput.value !== item.notes) {
+          saveInlineTaskField(item.taskId, { notes: commentInput.value });
+        }
+      });
+      commentCell.appendChild(commentInput);
+
+      tr.appendChild(checkboxCell);
+      tr.appendChild(nameCell);
+      tr.appendChild(staffCell);
+      tr.appendChild(taskCell);
+      tr.appendChild(endCell);
+      tr.appendChild(progressCell);
+      tr.appendChild(statusCell);
+      tr.appendChild(commentCell);
+      body.appendChild(tr);
+    });
+  }
+
+  function saveInlineTaskField(taskId, updates) {
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler(onDataLoaded)
+      .withFailureHandler(onError)
+      .saveTaskUpdate(taskId, updates, getReferenceDate());
   }
 
   function loadAnnualView() {
@@ -241,23 +236,57 @@
     renderFilteredAnnualGantt();
   }
 
+  /**
+   * Annual calendar: only companies within ±2 months of the reference
+   * date are shown (same "in season" rule as the action panel), and rows
+   * sharing an identical period (same type + start + end - i.e. the same
+   * 決算日) are merged into a single bar listing every company that
+   * shares it, instead of one row per company.
+   */
   function renderFilteredAnnualGantt() {
     if (!latestAnnualData) return;
 
+    var referenceDate = getReferenceDate();
     var staff = getSelectedStaff();
-    var rows = latestAnnualData.rows;
-    if (staff && latestData) {
-      var allowedCustomerIds = {};
+    var fiscalEndById = {};
+    var staffById = {};
+    if (latestData) {
       latestData.cases.forEach(function (c) {
-        if (c.staff === staff) allowedCustomerIds[c.customerId] = true;
+        fiscalEndById[c.customerId] = c.fiscalEndDate;
+        staffById[c.customerId] = c.staff;
       });
-      rows = rows.filter(function (r) { return allowedCustomerIds[r.customerId]; });
+    }
+
+    var rows = latestAnnualData.rows.filter(function (r) {
+      if (staff && staffById[r.customerId] !== staff) return false;
+      return isInSeason(fiscalEndById[r.customerId], referenceDate);
+    });
+
+    var groups = {};
+    var groupOrder = [];
+    rows.forEach(function (r) {
+      var key = r.type + '|' + r.start + '|' + r.end;
+      if (!groups[key]) {
+        groups[key] = { type: r.type, start: r.start, end: r.end, names: [] };
+        groupOrder.push(key);
+      }
+      groups[key].names.push(r.customerName);
+    });
+    var groupedRows = groupOrder.map(function (key, i) {
+      var g = groups[key];
+      var suffix = g.type === 'prep' ? '（準備期間）' : '（決算期間）';
+      return { id: 'group' + i, type: g.type, start: g.start, end: g.end, name: g.names.join('、') + suffix };
+    });
+
+    var todayMarker = [];
+    if (referenceDate && new Date(referenceDate).getFullYear() === latestAnnualData.year) {
+      todayMarker.push({ id: 'today_marker', type: 'today-marker', name: '', start: referenceDate, end: referenceDate });
     }
 
     var container = document.getElementById('annualGanttContainer');
     container.innerHTML = '';
 
-    var tasks = latestAnnualData.milestones.concat(rows).map(function (item) {
+    var tasks = latestAnnualData.milestones.concat(groupedRows).concat(todayMarker).map(function (item) {
       return {
         id: item.id,
         name: item.name,
@@ -275,15 +304,38 @@
 
     try {
       new Gantt('#annualGanttContainer', tasks, { view_mode: 'Month' });
+      drawTodayLine();
     } catch (e) {
       console.error('Annual gantt render failed', e);
       container.innerHTML = '<p class="muted">年間カレンダーの表示に失敗しました: ' + escapeHtml(e.message) + '</p>';
     }
   }
 
-  function scrollToCase(customerId) {
-    var el = document.getElementById('case-' + customerId);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /**
+   * Draws a full-height red vertical line at the reference date. There is
+   * no supported way to ask frappe-gantt for a date's pixel position, so
+   * instead we let it lay out an invisible same-day marker task (see
+   * `type-today-marker` in Stylesheet.html) and read back the x position
+   * it computed for that bar - accurate regardless of view mode/version
+   * quirks, since it reuses the library's own layout math.
+   */
+  function drawTodayLine() {
+    var wrapper = document.querySelector('#annualGanttContainer .bar-wrapper[data-id="today_marker"]');
+    if (!wrapper) return;
+    var bar = wrapper.querySelector('.bar');
+    var svg = document.querySelector('#annualGanttContainer svg');
+    if (!bar || !svg) return;
+
+    var x = bar.getBBox().x;
+    var height = svg.getBBox().height;
+
+    var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x);
+    line.setAttribute('x2', x);
+    line.setAttribute('y1', 0);
+    line.setAttribute('y2', height);
+    line.setAttribute('class', 'today-line');
+    svg.appendChild(line);
   }
 
   function findTask(taskId) {
