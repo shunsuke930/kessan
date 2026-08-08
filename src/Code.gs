@@ -68,7 +68,8 @@ function getDashboardData(referenceDateIso) {
   return {
     referenceDate: toIsoDateString_(today),
     caseCount: cases.length,
-    cases: cases
+    cases: cases,
+    version: APP_VERSION
   };
 }
 
@@ -87,5 +88,17 @@ function runSyncAndGetDashboardData(referenceDateIso) {
  */
 function saveTaskUpdate(taskId, updates, referenceDateIso) {
   updateTask(taskId, updates);
+  return getDashboardData(referenceDateIso);
+}
+
+/**
+ * Applies a batch of task edits (see updateTasksBatch_ in TaskService.gs)
+ * in one read/write round trip, then returns the refreshed dashboard
+ * data. Used by the dashboard's debounced inline-edit queue so a burst of
+ * status/comment changes across several rows becomes a single request
+ * instead of one per field.
+ */
+function saveTaskUpdatesBatch(updatesList, referenceDateIso) {
+  updateTasksBatch_(updatesList);
   return getDashboardData(referenceDateIso);
 }

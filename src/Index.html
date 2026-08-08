@@ -16,6 +16,7 @@
         <input type="date" id="referenceDateInput">
       </label>
       <button id="syncButton" class="btn btn-primary">スプレッドシートと同期</button>
+      <span id="saveStatus" class="save-status" style="display:none;"></span>
     </div>
   </header>
 
@@ -90,9 +91,14 @@
         ※マイルストンは一般的な目安です。実際の期限は個別にご確認ください。
         会社の行は、基準日の前後2ヶ月以内に決算を迎える会社のみ、同じ期間同士をまとめて表示します。
       </p>
+      <div id="milestoneStripContainer" class="milestone-strip"></div>
       <div id="annualGanttContainer" class="gantt-container annual-gantt"></div>
     </section>
   </main>
+
+  <footer class="app-footer">
+    <span id="appVersionLabel" class="muted"></span>
+  </footer>
 
   <div id="editModal" class="modal-backdrop" style="display:none;">
     <div class="modal">

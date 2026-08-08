@@ -140,6 +140,46 @@ function syncTasksFromCustomers() {
 }
 
 /**
+ * Removes duplicate task rows (same customerId + fiscalEndDate + taskKey),
+ * keeping the first occurrence of each and deleting the rest. Unlike
+ * `resetAllTasks`, this preserves recorded progress/comments on the row
+ * that's kept - use this when duplicates have appeared (e.g. from a sync
+ * race before the LockService fix) but you don't want to lose existing
+ * data. Run manually once from the Apps Script editor's function picker.
+ * Returns the number of rows removed.
+ */
+function deduplicateTasks() {
+  var sheet = getTasksSheet_();
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return { removed: 0 };
+
+  var colIndex = buildHeaderIndex_(values[0]);
+  var seen = {};
+  var rowsToDelete = [];
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (row.every(function (c) { return c === '' || c === null; })) continue;
+
+    var fiscalEndRaw = row[colIndex.fiscalEndDate];
+    var fiscalKey = fiscalEndRaw instanceof Date ? fiscalEndRaw.getTime() : fiscalEndRaw;
+    var key = row[colIndex.customerId] + '|' + fiscalKey + '|' + row[colIndex.taskKey];
+
+    if (Object.prototype.hasOwnProperty.call(seen, key)) {
+      rowsToDelete.push(i + 1); // 1-based sheet row number
+    } else {
+      seen[key] = true;
+    }
+  }
+
+  // Delete bottom-to-top so earlier indices stay valid as rows shift up.
+  rowsToDelete.sort(function (a, b) { return b - a; });
+  rowsToDelete.forEach(function (sheetRow) { sheet.deleteRow(sheetRow); });
+
+  return { removed: rowsToDelete.length };
+}
+
+/**
  * Clears every stored task row (keeps the header). `ensureTasksForCustomer_`
  * is idempotent per customer + fiscal cycle, so it will never regenerate
  * tasks for a cycle that already has rows - meaning a TASK_TEMPLATE change
@@ -185,4 +225,41 @@ function updateTask(taskId, updates) {
   }
 
   throw new Error('Task not found: ' + taskId);
+}
+
+/**
+ * Same as updateTask, but applies a whole batch of {taskId, updates} items
+ * in a single read + single write of the sheet's data range, instead of
+ * one read/write pair per task. Used by the dashboard's debounced
+ * inline-edit queue so a burst of status/comment edits (possibly across
+ * several rows) becomes one round trip instead of many, avoiding a
+ * disruptive loading state per keystroke/change.
+ */
+function updateTasksBatch_(updatesList) {
+  var sheet = getTasksSheet_();
+  var range = sheet.getDataRange();
+  var values = range.getValues();
+  var colIndex = buildHeaderIndex_(values[0]);
+  var editableFields = ['taskName', 'plannedStart', 'plannedEnd', 'progressStatus', 'manualOverride', 'notes'];
+
+  var byTaskId = {};
+  updatesList.forEach(function (item) { byTaskId[item.taskId] = item.updates; });
+
+  for (var i = 1; i < values.length; i++) {
+    var taskId = values[i][colIndex.taskId];
+    var updates = byTaskId[taskId];
+    if (!updates) continue;
+
+    editableFields.forEach(function (field) {
+      if (!Object.prototype.hasOwnProperty.call(updates, field)) return;
+      var value = updates[field];
+      if ((field === 'plannedStart' || field === 'plannedEnd') && value) {
+        value = normalizeDate_(value);
+      }
+      values[i][colIndex[field]] = value;
+    });
+    values[i][colIndex.updatedAt] = new Date();
+  }
+
+  range.setValues(values);
 }

@@ -8,6 +8,15 @@
   var latestAnnualData = null;
   var actionFilters = { phase: '', customerName: '', progressStatus: '' };
 
+  // Inline edits (ステータス/コメント) are queued here and sent as one
+  // saveTaskUpdatesBatch call after a short pause, instead of one
+  // google.script.run round trip (and disruptive full-page loading state)
+  // per keystroke/change. See queueTaskUpdate / flushPendingUpdates below.
+  var pendingUpdates = {};
+  var pendingTimer = null;
+  var saveStatusHideTimer = null;
+  var BATCH_DEBOUNCE_MS = 1000;
+
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
     document.getElementById('annualYearInput').value = new Date().getFullYear();
@@ -22,6 +31,9 @@
     document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
+    window.addEventListener('beforeunload', function () {
+      if (hasPendingUpdates()) flushPendingUpdates();
+    });
   });
 
   function onActionFilterChange() {
@@ -62,6 +74,10 @@
   }
 
   function load() {
+    // A pending batch already fetches fresh dashboard data as of the
+    // current reference date when it lands, so let it carry the load
+    // instead of racing it with a second, separate fetch.
+    if (hasPendingUpdates()) { flushPendingUpdates(); return; }
     setLoading(true);
     google.script.run
       .withSuccessHandler(onDataLoaded)
@@ -71,6 +87,7 @@
 
   function onSync() {
     if (document.getElementById('syncButton').disabled) return;
+    flushPendingUpdates();
     document.getElementById('syncButton').disabled = true;
     setLoading(true);
     google.script.run
@@ -105,6 +122,8 @@
 
   function render(data) {
     document.getElementById('referenceDateLabel').textContent = '基準日: ' + data.referenceDate + '（' + data.caseCount + '件）';
+    var versionLabel = document.getElementById('appVersionLabel');
+    if (versionLabel && data.version) versionLabel.textContent = 'バージョン: ' + data.version;
     populateStaffFilter(data.cases);
     applyFilter();
   }
@@ -186,9 +205,17 @@
     });
     rows.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
 
+    // A batched save re-renders this table once the write completes; if the
+    // user is still focused on a status/comment cell at that moment,
+    // preserve that focus (and any not-yet-blurred text) so typing isn't
+    // interrupted.
+    var focusState = captureActionFocusState();
+
     var body = document.getElementById('actionTableBody');
     body.innerHTML = '';
-    document.getElementById('actionTable').style.display = rows.length ? '' : 'none';
+    // Keep the table (and its filter-row dropdowns) visible even when the
+    // current filter combination matches nothing - only the empty-state
+    // message toggles, so the user can still change the filters back.
     document.getElementById('actionEmptyState').style.display = rows.length ? 'none' : 'block';
 
     rows.forEach(function (r) {
@@ -220,6 +247,8 @@
       var statusCell = document.createElement('td');
       var statusSelect = document.createElement('select');
       statusSelect.className = 'status-select';
+      statusSelect.dataset.taskId = r.taskId;
+      statusSelect.dataset.field = 'progressStatus';
       ['未着手', '対応中', '完了'].forEach(function (v) {
         var opt = document.createElement('option');
         opt.value = v;
@@ -240,10 +269,10 @@
       commentInput.className = 'comment-input';
       commentInput.value = r.notes;
       commentInput.placeholder = 'コメント';
-      commentInput.addEventListener('blur', function () {
-        if (commentInput.value !== r.notes) {
-          saveInlineTaskField(r.taskId, { notes: commentInput.value });
-        }
+      commentInput.dataset.taskId = r.taskId;
+      commentInput.dataset.field = 'notes';
+      commentInput.addEventListener('input', function () {
+        saveInlineTaskField(r.taskId, { notes: commentInput.value });
       });
       commentCell.appendChild(commentInput);
 
@@ -251,6 +280,8 @@
         .forEach(function (td) { tr.appendChild(td); });
       body.appendChild(tr);
     });
+
+    restoreActionFocusState(focusState);
   }
 
   function applyStatusSelectColor(select, value) {
@@ -281,12 +312,114 @@
     if (values.indexOf(previous) !== -1) select.value = previous;
   }
 
+  /**
+   * Inline edits (ステータス選択・コメント入力) go through here instead of
+   * calling the server directly. Each call updates the in-memory task
+   * immediately (so the UI never looks stale) and queues the change; a
+   * short debounce timer then sends every queued change as a single
+   * saveTaskUpdatesBatch call, so a burst of edits across several rows/
+   * fields becomes one round trip instead of one per change, and never
+   * triggers the full-page "更新中" loading state.
+   */
   function saveInlineTaskField(taskId, updates) {
-    setLoading(true);
+    queueTaskUpdate(taskId, updates);
+  }
+
+  function queueTaskUpdate(taskId, updates) {
+    pendingUpdates[taskId] = Object.assign(pendingUpdates[taskId] || {}, updates);
+    applyOptimisticPatch(taskId, updates);
+    setSaveStatus('pending');
+    if (pendingTimer) clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(function () { flushPendingUpdates(); }, BATCH_DEBOUNCE_MS);
+  }
+
+  function applyOptimisticPatch(taskId, updates) {
+    var task = findTask(taskId);
+    if (!task) return;
+    Object.keys(updates).forEach(function (field) { task[field] = updates[field]; });
+  }
+
+  function hasPendingUpdates() {
+    return Object.keys(pendingUpdates).length > 0;
+  }
+
+  function flushPendingUpdates(callback) {
+    if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+    if (!hasPendingUpdates()) { if (callback) callback(); return; }
+
+    var updatesList = Object.keys(pendingUpdates).map(function (taskId) {
+      return { taskId: taskId, updates: pendingUpdates[taskId] };
+    });
+    pendingUpdates = {};
+
+    setSaveStatus('saving');
+
     google.script.run
-      .withSuccessHandler(onDataLoaded)
-      .withFailureHandler(onError)
-      .saveTaskUpdate(taskId, updates, getReferenceDate());
+      .withSuccessHandler(function (data) {
+        latestData = data;
+        render(data);
+        setSaveStatus('saved');
+        if (callback) callback();
+      })
+      .withFailureHandler(function (error) {
+        setSaveStatus('error');
+        onError(error);
+        if (callback) callback();
+      })
+      .saveTaskUpdatesBatch(updatesList, getReferenceDate());
+  }
+
+  function setSaveStatus(state) {
+    var el = document.getElementById('saveStatus');
+    if (!el) return;
+    if (saveStatusHideTimer) { clearTimeout(saveStatusHideTimer); saveStatusHideTimer = null; }
+
+    var textByState = {
+      pending: '未保存の変更があります…',
+      saving: '保存中…',
+      saved: '保存しました',
+      error: '保存に失敗しました'
+    };
+    el.textContent = textByState[state] || '';
+    el.className = 'save-status save-status-' + state;
+    el.style.display = 'inline';
+
+    if (state === 'saved') {
+      saveStatusHideTimer = setTimeout(function () { el.style.display = 'none'; }, 2000);
+    }
+  }
+
+  /**
+   * A batched save re-renders the whole action table from fresh server
+   * data, which would otherwise steal focus (and any not-yet-queued
+   * keystroke) from a status-select or comment-input the user is still
+   * using. These capture/restore the focused cell around that re-render.
+   */
+  function captureActionFocusState() {
+    var el = document.activeElement;
+    if (!el || !el.dataset || !el.dataset.taskId) return null;
+    var state = { taskId: el.dataset.taskId, field: el.dataset.field, value: el.value };
+    if (typeof el.selectionStart === 'number') state.selectionStart = el.selectionStart;
+    return state;
+  }
+
+  function restoreActionFocusState(state) {
+    if (!state) return;
+    var el = document.querySelector(
+      '[data-task-id="' + state.taskId + '"][data-field="' + state.field + '"]'
+    );
+    if (!el) return;
+
+    if (state.field === 'notes' && el.value !== state.value) {
+      el.value = state.value;
+      // The keystrokes that produced this value happened on the DOM node
+      // being replaced, so re-queue them under the new one.
+      saveInlineTaskField(state.taskId, { notes: state.value });
+    }
+    el.focus();
+    if (typeof state.selectionStart === 'number' && el.setSelectionRange) {
+      el.setSelectionRange(state.selectionStart, state.selectionStart);
+    }
   }
 
   function loadAnnualView() {
@@ -299,7 +432,77 @@
 
   function onAnnualDataLoaded(data) {
     latestAnnualData = data;
+    renderMilestoneStrip(data.milestones, data.year);
     renderFilteredAnnualGantt();
+  }
+
+  /**
+   * Compact overview of the year's/next year's compliance milestones,
+   * shown as one packed strip above the customer Gantt chart instead of
+   * one full Gantt row per milestone (14 rows for 7 milestones x 2 years -
+   * far too cluttered). Milestones are laid out with a greedy interval-
+   * scheduling pack: sorted by start date, each placed in the first lane
+   * whose last-placed item already ended, so only genuinely overlapping
+   * milestones end up on separate lanes.
+   */
+  function renderMilestoneStrip(milestones, year) {
+    var container = document.getElementById('milestoneStripContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!milestones || !milestones.length) return;
+
+    var rangeStart = new Date(year, 0, 1);
+    var rangeEnd = new Date(year + 2, 0, 1);
+    var totalMs = rangeEnd.getTime() - rangeStart.getTime();
+
+    var ruler = document.createElement('div');
+    ruler.className = 'milestone-ruler';
+    for (var m = 0; m < 24; m++) {
+      var tickDate = new Date(year, m, 1);
+      var tick = document.createElement('div');
+      tick.className = 'milestone-tick';
+      tick.style.left = ((tickDate.getTime() - rangeStart.getTime()) / totalMs * 100) + '%';
+      tick.textContent = (tickDate.getMonth() + 1) + '月' + (tickDate.getMonth() === 0 ? '（' + tickDate.getFullYear() + '）' : '');
+      ruler.appendChild(tick);
+    }
+    container.appendChild(ruler);
+
+    var items = milestones.map(function (ms) {
+      return { id: ms.id, name: ms.name, start: new Date(ms.start), end: new Date(ms.end) };
+    }).sort(function (a, b) { return a.start - b.start; });
+
+    var laneEnds = [];
+    items.forEach(function (item) {
+      var lane = -1;
+      for (var i = 0; i < laneEnds.length; i++) {
+        if (laneEnds[i] <= item.start) { lane = i; break; }
+      }
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(null); }
+      laneEnds[lane] = item.end;
+      item.lane = lane;
+    });
+
+    var rowHeight = 26;
+    var lanes = document.createElement('div');
+    lanes.className = 'milestone-lanes';
+    lanes.style.height = (laneEnds.length * rowHeight + 4) + 'px';
+
+    items.forEach(function (item) {
+      var leftPct = Math.max(0, (item.start.getTime() - rangeStart.getTime()) / totalMs * 100);
+      var rightPct = Math.min(100, (item.end.getTime() - rangeStart.getTime()) / totalMs * 100);
+      var widthPct = Math.max(rightPct - leftPct, 0.6);
+
+      var block = document.createElement('div');
+      block.className = 'milestone-block';
+      block.style.left = leftPct + '%';
+      block.style.width = widthPct + '%';
+      block.style.top = (item.lane * rowHeight) + 'px';
+      block.textContent = item.name;
+      block.title = item.name + '（' + toLocalIsoDate(item.start) + ' 〜 ' + toLocalIsoDate(item.end) + '）';
+      lanes.appendChild(block);
+    });
+
+    container.appendChild(lanes);
   }
 
   /**
@@ -352,7 +555,7 @@
     var container = document.getElementById('annualGanttContainer');
     container.innerHTML = '';
 
-    var tasks = latestAnnualData.milestones.concat(groupedRows).concat(todayMarker).map(function (item) {
+    var tasks = groupedRows.concat(todayMarker).map(function (item) {
       return {
         id: item.id,
         name: item.name,
@@ -417,6 +620,11 @@
   var editingTaskId = null;
 
   function openEditModal(taskId) {
+    // Send any queued inline edit for this task first, so the modal opens
+    // with (and later saves on top of) the latest state instead of racing
+    // a debounced batch that hasn't gone out yet.
+    if (pendingUpdates[taskId]) flushPendingUpdates();
+
     var task = findTask(taskId);
     if (!task) return;
     editingTaskId = taskId;
@@ -449,6 +657,7 @@
       notes: document.getElementById('editNotes').value
     };
 
+    delete pendingUpdates[taskId];
     setLoading(true);
     closeEditModal();
     google.script.run

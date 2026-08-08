@@ -12,6 +12,12 @@ function getScriptProperty_(key, fallback) {
   return value ? value : fallback;
 }
 
+// Bumped on every code change and shown in the dashboard's footer, so it's
+// possible to check at a glance whether every file was actually pasted
+// into this Apps Script project - if the footer doesn't match what the
+// setup instructions say it should be, some file was missed.
+var APP_VERSION = '2026-08-08.1';
+
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
   CUSTOMER_SPREADSHEET_ID: getScriptProperty_('CUSTOMER_SPREADSHEET_ID', ''),

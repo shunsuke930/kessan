@@ -66,6 +66,12 @@
   .btn-primary { background: #1a73e8; color: #fff; border-color: #1a73e8; }
   .btn-primary:hover { background: #1765cc; }
 
+  .save-status { font-size: 12.5px; padding: 4px 10px; border-radius: 12px; white-space: nowrap; }
+  .save-status-pending { background: #f2f3f5; color: #6a737d; }
+  .save-status-saving { background: #e3f0fd; color: #1a73e8; }
+  .save-status-saved { background: #e6f4ea; color: #1e7e34; }
+  .save-status-error { background: #fdecea; color: #c0392b; }
+
   .loading, .error-box { padding: 40px; text-align: center; color: #6a737d; }
   .error-box { color: #c0392b; white-space: pre-wrap; text-align: left; }
 
@@ -180,8 +186,52 @@
   }
   .annual-note { margin-bottom: 10px; }
 
+  .milestone-strip {
+    position: relative;
+    margin-bottom: 14px;
+    padding-top: 20px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: #fafbfc;
+    overflow-x: auto;
+  }
+  .milestone-ruler {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 18px;
+  }
+  .milestone-tick {
+    position: absolute;
+    top: 2px;
+    font-size: 10px;
+    color: #8a8f98;
+    white-space: nowrap;
+    transform: translateX(2px);
+    border-left: 1px solid var(--color-border);
+    padding-left: 3px;
+    height: 100%;
+  }
+  .milestone-lanes { position: relative; }
+  .milestone-block {
+    position: absolute;
+    height: 22px;
+    line-height: 22px;
+    padding: 0 8px;
+    border-radius: 4px;
+    background: var(--color-milestone);
+    color: #fff;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-footer {
+    padding: 16px 24px 28px;
+    text-align: center;
+  }
+
   /* Frappe Gantt bar coloring for the annual calendar view */
-  .annual-gantt .bar-wrapper.type-milestone .bar { fill: var(--color-milestone); }
   .annual-gantt .bar-wrapper.type-prep .bar { fill: var(--color-prep); }
   .annual-gantt .bar-wrapper.type-settlement .bar { fill: var(--color-settlement); }
   /* Invisible marker task used only to read the reference date's pixel
