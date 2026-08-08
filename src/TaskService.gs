@@ -1,13 +1,14 @@
 /**
- * The app's own data store for tasks/progress (要件定義書 3.3, 3.4).
- * Lives on a dedicated sheet (CONFIG.TASKS_SHEET_NAME) so the existing
- * customer-master sheet is never written to.
+ * The app's own data store for tasks/progress. Rows are keyed by
+ * customer + task rule + target month (this app generates one task list
+ * per calendar month, not per fiscal cycle - see TASK_RULES in
+ * Constants.gs). Lives on a dedicated sheet (CONFIG.TASKS_SHEET_NAME) so
+ * the existing customer-master sheet is never written to.
  */
 
 var TASK_HEADERS = [
-  'taskId', 'customerId', 'customerName', 'fiscalEndDate', 'taskKey',
-  'phase', 'taskName', 'order', 'plannedStart', 'plannedEnd', 'progressStatus',
-  'manualOverride', 'notes', 'updatedAt'
+  'taskId', 'customerId', 'customerName', 'targetMonth', 'taskKey',
+  'taskName', 'order', 'progressStatus', 'notes', 'updatedAt'
 ];
 
 function getTasksSpreadsheet_() {
@@ -34,9 +35,7 @@ function taskRowToObject_(row, colIndex) {
   TASK_HEADERS.forEach(function (h) {
     obj[h] = row[colIndex[h]];
   });
-  obj.plannedStart = normalizeDate_(obj.plannedStart);
-  obj.plannedEnd = normalizeDate_(obj.plannedEnd);
-  obj.fiscalEndDate = normalizeDate_(obj.fiscalEndDate);
+  obj.targetMonth = normalizeDate_(obj.targetMonth);
   return obj;
 }
 
@@ -69,86 +68,135 @@ function getAllTaskRecords_() {
 }
 
 /**
- * Ensures the given customer has a full set of tasks generated from the
- * template for their current fiscal-year-end cycle. Idempotent: if tasks
- * already exist for this customer + fiscal end date, nothing is created.
- * Returns true if new tasks were generated.
+ * For a given month, finds every (customer, rule) pair whose 決算日 lines
+ * up with that rule's monthOffset - e.g. 申告・納税 (monthOffset -2)
+ * matches customers whose fiscal year-end month is 2 months before the
+ * target month. `fiscalInstanceDate` is the concrete 決算日 for the
+ * matching cycle (used only for display, e.g. the 決算期 column).
  */
-function ensureTasksForCustomer_(customer, existingRecords) {
-  var already = existingRecords.some(function (r) {
-    return r.customerId === customer.id &&
-      r.fiscalEndDate && customer.fiscalEndDate &&
-      r.fiscalEndDate.getTime() === customer.fiscalEndDate.getTime();
-  });
-  if (already) return false;
+function getMonthlyMatches_(customers, targetMonthDate) {
+  var matches = [];
+  TASK_RULES.forEach(function (rule) {
+    var ruleMonthDate = addMonths_(targetMonthDate, rule.monthOffset);
+    var ruleMonth = ruleMonthDate.getMonth() + 1;
+    var ruleYear = ruleMonthDate.getFullYear();
 
-  var sheet = getTasksSheet_();
-  var now = new Date();
-  var rows = TASK_TEMPLATE.map(function (tpl) {
-    var window = PHASE_DATE_WINDOWS[tpl.phase];
-    return [
-      Utilities.getUuid(),
-      customer.id,
-      customer.customerName,
-      customer.fiscalEndDate,
-      tpl.key,
-      tpl.phase,
-      tpl.name,
-      TASK_TEMPLATE.indexOf(tpl),
-      addMonths_(customer.fiscalEndDate, window.startMonths),
-      addMonths_(customer.fiscalEndDate, window.endMonths),
-      '未着手',
-      '',
-      '',
-      now
-    ];
+    customers.forEach(function (customer) {
+      if (customer.fiscalMonth !== ruleMonth) return;
+      matches.push({
+        customer: customer,
+        rule: rule,
+        fiscalInstanceDate: fiscalDateInYear_(customer.fiscalMonth, customer.fiscalDay, ruleYear)
+      });
+    });
   });
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, TASK_HEADERS.length).setValues(rows);
-  return true;
+  return matches;
+}
+
+function monthKey_(monthDate) {
+  return monthDate.getTime();
 }
 
 /**
- * Generates tasks for every customer that doesn't have a set yet for
- * their current fiscal cycle. Safe to run repeatedly (e.g. on a daily
- * trigger, or manually from the dashboard's "sync" action).
+ * Ensures a stored row exists for every matched (customer, rule) pair in
+ * this target month, so inline edits always have a real taskId to save
+ * against. Idempotent - already-existing rows are left untouched. This
+ * is called every time the list is viewed (see getMonthlyTaskList), not
+ * just from an explicit "sync" action, so the list is always current
+ * without the user having to remember to sync first.
  *
- * This is a shared web app (~10 staff, everyone can trigger 同期), so a
- * script lock serializes concurrent calls: ensureTasksForCustomer_'s
- * idempotency check reads existingRecords once up front, and without a
- * lock, two syncs starting close together (a double-click, or two people
- * clicking around the same time) can both read "not generated yet" before
- * either has written, each appending a full set of tasks - duplicating
- * every task for every affected customer.
+ * This is a shared web app (~10 staff), so a script lock serializes
+ * concurrent calls - without it, two people opening the same month at
+ * once could both see "not created yet" and both append, duplicating
+ * rows.
  */
-function syncTasksFromCustomers() {
+function ensureMonthlyTasks_(matches, targetMonthDate, existingRecords) {
+  var existingKeys = {};
+  existingRecords.forEach(function (r) {
+    if (!r.targetMonth) return;
+    existingKeys[r.customerId + '|' + r.taskKey + '|' + monthKey_(r.targetMonth)] = true;
+  });
+
+  var sheet = getTasksSheet_();
+  var now = new Date();
+  var newRows = [];
+  var targetKey = monthKey_(targetMonthDate);
+
+  matches.forEach(function (m) {
+    var key = m.customer.id + '|' + m.rule.key + '|' + targetKey;
+    if (existingKeys[key]) return;
+    existingKeys[key] = true;
+
+    newRows.push([
+      Utilities.getUuid(),
+      m.customer.id,
+      m.customer.customerName,
+      targetMonthDate,
+      m.rule.key,
+      m.rule.name,
+      TASK_RULES.indexOf(m.rule),
+      '未着手',
+      '',
+      now
+    ]);
+  });
+
+  if (newRows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, TASK_HEADERS.length).setValues(newRows);
+  }
+  return newRows.length;
+}
+
+/**
+ * Returns this month's task list: every customer matching one of
+ * TASK_RULES for `targetMonthDate`, joined with its stored progress/notes
+ * (creating the stored row first if this is the first time it's been
+ * viewed). Locked so concurrent viewers never race on row creation.
+ */
+function getMonthlyTasks_(targetMonthDate) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var customers = getCustomers();
+    var matches = getMonthlyMatches_(customers, targetMonthDate);
     var existingRecords = getAllTaskRecords_();
-    var generatedCount = 0;
+    ensureMonthlyTasks_(matches, targetMonthDate, existingRecords);
 
-    customers.forEach(function (customer) {
-      if (ensureTasksForCustomer_(customer, existingRecords)) generatedCount++;
+    // Re-read so freshly-created rows are included with their real taskId.
+    var records = getAllTaskRecords_();
+    var recordByKey = {};
+    records.forEach(function (r) {
+      if (!r.targetMonth) return;
+      recordByKey[r.customerId + '|' + r.taskKey + '|' + monthKey_(r.targetMonth)] = r;
     });
 
-    return {
-      customerCount: customers.length,
-      generatedCount: generatedCount
-    };
+    var targetKey = monthKey_(targetMonthDate);
+    return matches.map(function (m) {
+      var record = recordByKey[m.customer.id + '|' + m.rule.key + '|' + targetKey];
+      return {
+        taskId: record ? record.taskId : null,
+        customerId: m.customer.id,
+        customerName: m.customer.customerName,
+        staff: m.customer.staff,
+        taskKey: m.rule.key,
+        taskName: m.rule.name,
+        fiscalEndDate: toIsoDateString_(m.fiscalInstanceDate),
+        progressStatus: record ? record.progressStatus : '未着手',
+        notes: record ? (record.notes || '') : ''
+      };
+    });
   } finally {
     lock.releaseLock();
   }
 }
 
 /**
- * Removes duplicate task rows (same customerId + fiscalEndDate + taskKey),
+ * Removes duplicate task rows (same customerId + taskKey + targetMonth),
  * keeping the first occurrence of each and deleting the rest. Unlike
  * `resetAllTasks`, this preserves recorded progress/comments on the row
- * that's kept - use this when duplicates have appeared (e.g. from a sync
- * race before the LockService fix) but you don't want to lose existing
- * data. Run manually once from the Apps Script editor's function picker.
- * Returns the number of rows removed.
+ * that's kept - use this when duplicates have appeared but you don't want
+ * to lose existing data. Run manually once from the Apps Script editor's
+ * function picker. Returns the number of rows removed.
  */
 function deduplicateTasks() {
   var sheet = getTasksSheet_();
@@ -163,9 +211,9 @@ function deduplicateTasks() {
     var row = values[i];
     if (row.every(function (c) { return c === '' || c === null; })) continue;
 
-    var fiscalEndRaw = row[colIndex.fiscalEndDate];
-    var fiscalKey = fiscalEndRaw instanceof Date ? fiscalEndRaw.getTime() : fiscalEndRaw;
-    var key = row[colIndex.customerId] + '|' + fiscalKey + '|' + row[colIndex.taskKey];
+    var targetMonthRaw = row[colIndex.targetMonth];
+    var monthKey = targetMonthRaw instanceof Date ? targetMonthRaw.getTime() : targetMonthRaw;
+    var key = row[colIndex.customerId] + '|' + row[colIndex.taskKey] + '|' + monthKey;
 
     if (Object.prototype.hasOwnProperty.call(seen, key)) {
       rowsToDelete.push(i + 1); // 1-based sheet row number
@@ -183,19 +231,11 @@ function deduplicateTasks() {
 
 /**
  * Clears every stored task row and rewrites the header row to match the
- * current TASK_HEADERS. `ensureTasksForCustomer_` is idempotent per
- * customer + fiscal cycle, so it will never regenerate tasks for a cycle
- * that already has rows - meaning a TASK_TEMPLATE change has no effect on
- * cycles synced under the old template until those rows are cleared. Run
- * this manually once from the Apps Script editor's function picker after
- * changing TASK_TEMPLATE, then re-run "スプレッドシートと同期" from the
- * dashboard. Intentionally not exposed to the web app UI, since it
- * discards all progress/comments recorded so far.
- *
- * Rewriting the header row (not just clearing data rows) means a
- * TASK_HEADERS change (e.g. a new column) is picked up automatically the
- * next time this runs, instead of silently leaving an old sheet with a
- * stale header that no longer matches the code.
+ * current TASK_HEADERS. Run this manually once from the Apps Script
+ * editor's function picker after changing TASK_HEADERS/TASK_RULES so an
+ * old sheet's column layout doesn't go stale, then reload the dashboard.
+ * Intentionally not exposed to the web app UI, since it discards all
+ * progress/comments recorded so far.
  */
 function resetAllTasks() {
   var sheet = getTasksSheet_();
@@ -211,10 +251,10 @@ function resetAllTasks() {
   }
 }
 
+var TASK_EDITABLE_FIELDS = ['progressStatus', 'notes'];
+
 /**
- * Updates editable fields on a single task row (要件定義書 3.2: generated
- * tasks can be individually adjusted). `updates` may include taskName,
- * plannedStart, plannedEnd, progressStatus, manualOverride, notes.
+ * Updates editable fields (progressStatus, notes) on a single task row.
  */
 function updateTask(taskId, updates) {
   var sheet = getTasksSheet_();
@@ -224,14 +264,9 @@ function updateTask(taskId, updates) {
   for (var i = 1; i < values.length; i++) {
     if (values[i][colIndex.taskId] !== taskId) continue;
 
-    var editableFields = ['taskName', 'plannedStart', 'plannedEnd', 'progressStatus', 'manualOverride', 'notes'];
-    editableFields.forEach(function (field) {
+    TASK_EDITABLE_FIELDS.forEach(function (field) {
       if (!Object.prototype.hasOwnProperty.call(updates, field)) return;
-      var value = updates[field];
-      if ((field === 'plannedStart' || field === 'plannedEnd') && value) {
-        value = normalizeDate_(value);
-      }
-      sheet.getRange(i + 1, colIndex[field] + 1).setValue(value);
+      sheet.getRange(i + 1, colIndex[field] + 1).setValue(updates[field]);
     });
     sheet.getRange(i + 1, colIndex.updatedAt + 1).setValue(new Date());
 
@@ -254,7 +289,6 @@ function updateTasksBatch_(updatesList) {
   var range = sheet.getDataRange();
   var values = range.getValues();
   var colIndex = buildHeaderIndex_(values[0]);
-  var editableFields = ['taskName', 'plannedStart', 'plannedEnd', 'progressStatus', 'manualOverride', 'notes'];
 
   var byTaskId = {};
   updatesList.forEach(function (item) { byTaskId[item.taskId] = item.updates; });
@@ -264,13 +298,9 @@ function updateTasksBatch_(updatesList) {
     var updates = byTaskId[taskId];
     if (!updates) continue;
 
-    editableFields.forEach(function (field) {
+    TASK_EDITABLE_FIELDS.forEach(function (field) {
       if (!Object.prototype.hasOwnProperty.call(updates, field)) return;
-      var value = updates[field];
-      if ((field === 'plannedStart' || field === 'plannedEnd') && value) {
-        value = normalizeDate_(value);
-      }
-      values[i][colIndex[field]] = value;
+      values[i][colIndex[field]] = updates[field];
     });
     values[i][colIndex.updatedAt] = new Date();
   }

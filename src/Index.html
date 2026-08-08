@@ -2,20 +2,18 @@
 <html>
 <head>
   <base target="_top">
-  <link rel="stylesheet" href="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.css">
   <?!= include('Stylesheet'); ?>
 </head>
 <body>
   <header class="app-header">
     <div>
       <h1>決算対応ダッシュボード</h1>
-      <p id="referenceDateLabel" class="muted"></p>
+      <p id="referenceMonthLabel" class="muted"></p>
     </div>
     <div class="header-actions">
-      <label class="reference-date-field">基準日
-        <input type="date" id="referenceDateInput">
+      <label class="reference-date-field">対象月
+        <input type="month" id="referenceMonthInput">
       </label>
-      <button id="syncButton" class="btn btn-primary">スプレッドシートと同期</button>
       <span id="saveStatus" class="save-status" style="display:none;"></span>
     </div>
   </header>
@@ -25,42 +23,30 @@
 
   <main id="app" style="display:none;">
     <section class="action-section">
-      <h2>タスク一覧</h2>
-      <p class="muted">基準日の前後2ヶ月以内に決算を迎える会社のタスクを一覧表示します。列見出し下のプルダウンで絞り込めます。</p>
+      <h2>今月のタスク一覧</h2>
+      <p class="muted">対象月を基準に、申告準備・申告納税・納税予想の対象となる会社を自動抽出して一覧表示します。列見出し下のプルダウンで絞り込めます。</p>
 
       <div class="table-scroll">
         <table id="actionTable">
           <thead>
             <tr>
-              <th>フェーズ</th>
               <th>タスク</th>
               <th>クライアント名</th>
               <th>決算期</th>
               <th>担当者</th>
-              <th>開始</th>
-              <th>期限</th>
               <th>ステータス</th>
               <th>コメント</th>
             </tr>
             <tr class="filter-row">
-              <th><select id="filterPhase">
-                <option value="">すべて</option>
-                <option value="preparation">決算準備</option>
-                <option value="settlement">申告・納税</option>
-              </select></th>
               <th><select id="filterTaskName">
                 <option value="">すべて</option>
-                <option value="問い合わせ先への事前連絡（必要書類依頼など）">問い合わせ先への事前連絡（必要書類依頼など）</option>
-                <option value="貸借対照表・資料作成">貸借対照表・資料作成</option>
-                <option value="申告書作成">申告書作成</option>
-                <option value="問い合わせ先への確認・承認取得">問い合わせ先への確認・承認取得</option>
+                <option value="申告準備">申告準備</option>
                 <option value="申告・納税">申告・納税</option>
+                <option value="納税予想">納税予想</option>
               </select></th>
               <th><select id="filterCustomer"><option value="">すべて</option></select></th>
               <th><select id="filterFiscalPeriod"><option value="">すべて</option></select></th>
               <th><select id="filterStaff"><option value="">すべて</option></select></th>
-              <th></th>
-              <th></th>
               <th><select id="filterStatus">
                 <option value="">すべて</option>
                 <option value="未着手">未着手</option>
@@ -75,75 +61,12 @@
       </div>
       <p id="actionEmptyState" class="muted" style="display:none;">該当するタスクはありません。</p>
     </section>
-
-    <section class="annual-section">
-      <div class="annual-section-header">
-        <h2>年間カレンダー</h2>
-        <label class="year-field">対象年
-          <input type="number" id="annualYearInput" step="1">
-        </label>
-        <div class="legend">
-          <span class="legend-item"><i class="dot dot-milestone"></i>一般的なマイルストン</span>
-          <span class="legend-item"><i class="dot dot-prep"></i>準備期間（決算日の2ヶ月前〜）</span>
-          <span class="legend-item"><i class="dot dot-settlement"></i>決算期間（決算日の2ヶ月後まで）</span>
-          <span class="legend-item"><i class="dot dot-today"></i>基準日</span>
-        </div>
-      </div>
-      <p class="muted annual-note">
-        ※マイルストンは一般的な目安です。実際の期限は個別にご確認ください。
-        会社の行は、基準日の前後2ヶ月以内に決算を迎える会社のみ、同じ期間同士をまとめて表示します。
-      </p>
-      <div id="milestoneStripContainer" class="milestone-strip"></div>
-      <div id="annualGanttContainer" class="gantt-container annual-gantt"></div>
-    </section>
   </main>
 
   <footer class="app-footer">
     <span id="appVersionLabel" class="muted"></span>
   </footer>
 
-  <div id="editModal" class="modal-backdrop" style="display:none;">
-    <div class="modal">
-      <h2 id="editModalTitle">タスク編集</h2>
-      <label>タスク名
-        <input type="text" id="editTaskName">
-      </label>
-      <div class="field-row">
-        <label>開始日
-          <input type="date" id="editPlannedStart">
-        </label>
-        <label>期限日
-          <input type="date" id="editPlannedEnd">
-        </label>
-      </div>
-      <div class="field-row">
-        <label>進捗
-          <select id="editProgressStatus">
-            <option value="未着手">未着手</option>
-            <option value="対応中">対応中</option>
-            <option value="完了">完了</option>
-          </select>
-        </label>
-        <label>ステータス手動指定
-          <select id="editManualOverride">
-            <option value="">自動判定</option>
-            <option value="normal">通常（グレー）</option>
-            <option value="warning">要注意（黄色）</option>
-            <option value="delayed">遅延（赤）</option>
-          </select>
-        </label>
-      </div>
-      <label>メモ
-        <textarea id="editNotes" rows="3"></textarea>
-      </label>
-      <div class="modal-actions">
-        <button id="cancelEditButton" class="btn">キャンセル</button>
-        <button id="saveEditButton" class="btn btn-primary">保存</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://unpkg.com/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
   <?!= include('JavaScript'); ?>
 </body>
 </html>

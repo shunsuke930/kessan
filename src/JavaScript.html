@@ -1,12 +1,10 @@
 <script>
-  var PHASE_LABEL = { preparation: '決算準備', settlement: '申告・納税' };
   var STAFF_COLORS = ['#fde2e2', '#fdebc8', '#e2f0d9', '#dbeafe', '#ede9fe', '#fce7f3', '#e0f2fe', '#fef3c7'];
   var PROGRESS_COLORS = { '未着手': '#e0e2e5', '対応中': '#fdebc8', '完了': '#2f3542' };
   var PROGRESS_TEXT_COLORS = { '未着手': '#333', '対応中': '#7a4a00', '完了': '#fff' };
 
   var latestData = null;
-  var latestAnnualData = null;
-  var actionFilters = { phase: '', taskName: '', customerName: '', fiscalPeriod: '', staff: '', progressStatus: '' };
+  var actionFilters = { taskName: '', customerName: '', fiscalPeriod: '', staff: '', progressStatus: '' };
 
   // Inline edits (ステータス/コメント) are queued here and sent as one
   // saveTaskUpdatesBatch call after a short pause, instead of one
@@ -18,34 +16,26 @@
   var BATCH_DEBOUNCE_MS = 1000;
 
   document.addEventListener('DOMContentLoaded', function () {
-    document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
-    document.getElementById('annualYearInput').value = new Date().getFullYear();
+    document.getElementById('referenceMonthInput').value = toLocalYearMonth(new Date());
     load();
-    loadAnnualView();
-    document.getElementById('syncButton').addEventListener('click', onSync);
-    document.getElementById('referenceDateInput').addEventListener('change', load);
-    document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
-    document.getElementById('filterPhase').addEventListener('change', onActionFilterChange);
+    document.getElementById('referenceMonthInput').addEventListener('change', load);
     document.getElementById('filterTaskName').addEventListener('change', onActionFilterChange);
     document.getElementById('filterCustomer').addEventListener('change', onActionFilterChange);
     document.getElementById('filterFiscalPeriod').addEventListener('change', onActionFilterChange);
     document.getElementById('filterStaff').addEventListener('change', onActionFilterChange);
     document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
-    document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
-    document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
     window.addEventListener('beforeunload', function () {
       if (hasPendingUpdates()) flushPendingUpdates();
     });
   });
 
   function onActionFilterChange() {
-    actionFilters.phase = document.getElementById('filterPhase').value;
     actionFilters.taskName = document.getElementById('filterTaskName').value;
     actionFilters.customerName = document.getElementById('filterCustomer').value;
     actionFilters.fiscalPeriod = document.getElementById('filterFiscalPeriod').value;
     actionFilters.staff = document.getElementById('filterStaff').value;
     actionFilters.progressStatus = document.getElementById('filterStatus').value;
-    renderActionPanel(latestData ? latestData.cases : []);
+    renderActionPanel(latestData ? latestData.rows : []);
   }
 
   function formatFiscalPeriod(fiscalEndDateIso) {
@@ -61,56 +51,26 @@
     return STAFF_COLORS[hash % STAFF_COLORS.length];
   }
 
-  function toLocalIsoDate(date) {
+  function toLocalYearMonth(date) {
     var y = date.getFullYear();
     var m = String(date.getMonth() + 1).padStart(2, '0');
-    var d = String(date.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
+    return y + '-' + m;
   }
 
-  function getReferenceDate() {
-    return document.getElementById('referenceDateInput').value || '';
-  }
-
-  // "Month index" (year*12 + month) so a ±2-month window can be compared
-  // with a single integer subtraction regardless of year boundaries.
-  function monthIndex(dateIso) {
-    var d = new Date(dateIso);
-    return d.getFullYear() * 12 + d.getMonth();
-  }
-
-  function isInSeason(fiscalEndDateIso, referenceDateIso) {
-    if (!fiscalEndDateIso || !referenceDateIso) return false;
-    return Math.abs(monthIndex(fiscalEndDateIso) - monthIndex(referenceDateIso)) <= 2;
+  function getReferenceMonth() {
+    return document.getElementById('referenceMonthInput').value || '';
   }
 
   function load() {
-    // A pending batch already fetches fresh dashboard data as of the
-    // current reference date when it lands, so let it carry the load
-    // instead of racing it with a second, separate fetch.
+    // A pending batch already fetches a fresh task list as of the current
+    // 対象月 when it lands, so let it carry the load instead of racing it
+    // with a second, separate fetch.
     if (hasPendingUpdates()) { flushPendingUpdates(); return; }
     setLoading(true);
     google.script.run
       .withSuccessHandler(onDataLoaded)
       .withFailureHandler(onError)
-      .getDashboardData(getReferenceDate());
-  }
-
-  function onSync() {
-    if (document.getElementById('syncButton').disabled) return;
-    flushPendingUpdates();
-    document.getElementById('syncButton').disabled = true;
-    setLoading(true);
-    google.script.run
-      .withSuccessHandler(function (data) {
-        document.getElementById('syncButton').disabled = false;
-        onDataLoaded(data);
-      })
-      .withFailureHandler(function (error) {
-        document.getElementById('syncButton').disabled = false;
-        onError(error);
-      })
-      .runSyncAndGetDashboardData(getReferenceDate());
+      .getMonthlyTaskList(getReferenceMonth());
   }
 
   function onDataLoaded(data) {
@@ -132,54 +92,38 @@
   }
 
   function render(data) {
-    document.getElementById('referenceDateLabel').textContent = '基準日: ' + data.referenceDate + '（' + data.caseCount + '件）';
+    document.getElementById('referenceMonthLabel').textContent = '対象月: ' + data.referenceMonth + '（' + data.rowCount + '件）';
     var versionLabel = document.getElementById('appVersionLabel');
     if (versionLabel && data.version) versionLabel.textContent = 'バージョン: ' + data.version;
-    renderActionPanel(data.cases);
-    renderFilteredAnnualGantt();
+    renderActionPanel(data.rows);
   }
 
   /**
-   * "タスク一覧": each in-season case (±2 months of the reference date)
-   * has its full set of sub-tasks from TASK_TEMPLATE (Constants.gs),
-   * grouped under one of two top-level phases (決算準備/申告・納税), each
-   * tracked with a simple 未着手/対応中/完了 status. Shown as one dense,
-   * spreadsheet-style table with column filters (フェーズ/タスク/
-   * クライアント名/ステータス). フェーズ列 doubles as the click target
-   * that opens the detailed edit modal (dates, manual override, notes).
+   * "今月のタスク一覧": 対象月を基準に TASK_RULES (Constants.gs) の条件に
+   * 一致する会社を自動抽出し、1行1タスクの密な表で表示する
+   * （タスク/クライアント名/決算期/担当者/ステータス/コメント）。
    */
-  function buildActionRows(cases) {
-    var referenceDate = getReferenceDate();
-    var rows = [];
-    cases.forEach(function (c) {
-      if (!isInSeason(c.fiscalEndDate, referenceDate)) return;
-      c.tasks.forEach(function (t) {
-        rows.push({
-          phase: t.phase,
-          taskKey: t.taskKey,
-          customerName: c.customerName,
-          fiscalEndDate: c.fiscalEndDate,
-          fiscalPeriod: formatFiscalPeriod(c.fiscalEndDate),
-          staff: c.staff,
-          taskId: t.taskId,
-          taskName: t.name,
-          start: t.start,
-          end: t.end,
-          progressStatus: t.progressStatus,
-          status: t.status,
-          notes: t.notes || ''
-        });
-      });
+  function buildActionRows(rows) {
+    return rows.map(function (r) {
+      return {
+        taskId: r.taskId,
+        taskKey: r.taskKey,
+        taskName: r.taskName,
+        customerName: r.customerName,
+        fiscalEndDate: r.fiscalEndDate,
+        fiscalPeriod: formatFiscalPeriod(r.fiscalEndDate),
+        staff: r.staff,
+        progressStatus: r.progressStatus,
+        notes: r.notes || ''
+      };
     });
-    return rows;
   }
 
-  function renderActionPanel(cases) {
-    var allRows = buildActionRows(cases);
+  function renderActionPanel(rawRows) {
+    var allRows = buildActionRows(rawRows);
     populateActionFilterOptions(allRows);
 
     var rows = allRows.filter(function (r) {
-      if (actionFilters.phase && r.phase !== actionFilters.phase) return false;
       if (actionFilters.taskName && r.taskName !== actionFilters.taskName) return false;
       if (actionFilters.customerName && r.customerName !== actionFilters.customerName) return false;
       if (actionFilters.fiscalPeriod && r.fiscalPeriod !== actionFilters.fiscalPeriod) return false;
@@ -187,9 +131,8 @@
       if (actionFilters.progressStatus && r.progressStatus !== actionFilters.progressStatus) return false;
       return true;
     });
-    rows.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
 
-    var referenceDate = getReferenceDate();
+    var referenceMonth = getReferenceMonth();
 
     // A batched save re-renders this table once the write completes; if the
     // user is still focused on a status/comment cell at that moment,
@@ -206,13 +149,7 @@
 
     rows.forEach(function (r) {
       var tr = document.createElement('tr');
-      tr.className = rowStatusClass(r, referenceDate);
-
-      var phaseCell = document.createElement('td');
-      phaseCell.textContent = PHASE_LABEL[r.phase] || r.phase;
-      phaseCell.className = 'clickable-cell';
-      phaseCell.title = 'クリックで期限や進捗を編集';
-      phaseCell.addEventListener('click', function () { openEditModal(r.taskId); });
+      tr.className = rowStatusClass(r, referenceMonth);
 
       var taskNameCell = document.createElement('td');
       taskNameCell.textContent = r.taskName;
@@ -221,7 +158,7 @@
       nameCell.textContent = r.customerName;
 
       var fiscalPeriodCell = document.createElement('td');
-      fiscalPeriodCell.textContent = formatFiscalPeriod(r.fiscalEndDate);
+      fiscalPeriodCell.textContent = r.fiscalPeriod;
 
       var staffCell = document.createElement('td');
       var staffChip = document.createElement('span');
@@ -229,12 +166,6 @@
       staffChip.style.background = staffColor(r.staff);
       staffChip.textContent = r.staff || '-';
       staffCell.appendChild(staffChip);
-
-      var fromCell = document.createElement('td');
-      fromCell.textContent = r.start;
-
-      var toCell = document.createElement('td');
-      toCell.textContent = r.end;
 
       var statusCell = document.createElement('td');
       var statusSelect = document.createElement('select');
@@ -268,7 +199,7 @@
       });
       commentCell.appendChild(commentInput);
 
-      [phaseCell, taskNameCell, nameCell, fiscalPeriodCell, staffCell, fromCell, toCell, statusCell, commentCell]
+      [taskNameCell, nameCell, fiscalPeriodCell, staffCell, statusCell, commentCell]
         .forEach(function (td) { tr.appendChild(td); });
       body.appendChild(tr);
     });
@@ -281,12 +212,14 @@
     select.style.color = PROGRESS_TEXT_COLORS[value] || '#333';
   }
 
-  // 完了 rows are greyed out; unfinished rows past their own 期限 (relative
-  // to 基準日) are tinted light red. Completed always wins even if the
-  // 期限 has technically passed, since there's nothing left to flag.
-  function rowStatusClass(r, referenceDate) {
+  // 完了 rows are greyed out. Unfinished rows are tinted light red once
+  // the 対象月 being viewed is already in the past (relative to today) -
+  // there's no longer a per-task deadline to compare against now that
+  // 開始/期限 are gone, so "overdue" means "this month's list is history
+  // and this task was never marked done".
+  function rowStatusClass(r, referenceMonth) {
     if (r.progressStatus === '完了') return 'row-done';
-    if (referenceDate && r.end && r.end < referenceDate) return 'row-overdue';
+    if (referenceMonth && referenceMonth < toLocalYearMonth(new Date())) return 'row-overdue';
     return '';
   }
 
@@ -294,6 +227,15 @@
     populateFilterSelect('filterCustomer', uniqueSorted(rows.map(function (r) { return r.customerName; })));
     populateFilterSelect('filterFiscalPeriod', uniqueFiscalPeriods(rows));
     populateFilterSelect('filterStaff', uniqueSorted(rows.map(function (r) { return r.staff; })));
+  }
+
+  function uniqueSorted(values) {
+    var seen = {};
+    var out = [];
+    values.forEach(function (v) {
+      if (v && !seen[v]) { seen[v] = true; out.push(v); }
+    });
+    return out.sort();
   }
 
   // Fiscal periods ("2026年6月期") need date order, not string order
@@ -309,15 +251,6 @@
     });
     items.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
     return items.map(function (i) { return i.label; });
-  }
-
-  function uniqueSorted(values) {
-    var seen = {};
-    var out = [];
-    values.forEach(function (v) {
-      if (v && !seen[v]) { seen[v] = true; out.push(v); }
-    });
-    return out.sort();
   }
 
   function populateFilterSelect(id, values, labelMap) {
@@ -357,6 +290,14 @@
     Object.keys(updates).forEach(function (field) { task[field] = updates[field]; });
   }
 
+  function findTask(taskId) {
+    if (!latestData) return null;
+    for (var i = 0; i < latestData.rows.length; i++) {
+      if (latestData.rows[i].taskId === taskId) return latestData.rows[i];
+    }
+    return null;
+  }
+
   function hasPendingUpdates() {
     return Object.keys(pendingUpdates).length > 0;
   }
@@ -384,7 +325,7 @@
         onError(error);
         if (callback) callback();
       })
-      .saveTaskUpdatesBatch(updatesList, getReferenceDate());
+      .saveTaskUpdatesBatch(updatesList, getReferenceMonth());
   }
 
   function setSaveStatus(state) {
@@ -438,246 +379,6 @@
     if (typeof state.selectionStart === 'number' && el.setSelectionRange) {
       el.setSelectionRange(state.selectionStart, state.selectionStart);
     }
-  }
-
-  function loadAnnualView() {
-    var year = document.getElementById('annualYearInput').value || new Date().getFullYear();
-    google.script.run
-      .withSuccessHandler(onAnnualDataLoaded)
-      .withFailureHandler(onError)
-      .getAnnualCalendarData(year);
-  }
-
-  function onAnnualDataLoaded(data) {
-    latestAnnualData = data;
-    renderMilestoneStrip(data.milestones, data.year);
-    renderFilteredAnnualGantt();
-  }
-
-  /**
-   * Compact overview of the year's/next year's compliance milestones,
-   * shown as one packed strip above the customer Gantt chart instead of
-   * one full Gantt row per milestone (14 rows for 7 milestones x 2 years -
-   * far too cluttered). Milestones are laid out with a greedy interval-
-   * scheduling pack: sorted by start date, each placed in the first lane
-   * whose last-placed item already ended, so only genuinely overlapping
-   * milestones end up on separate lanes.
-   */
-  function renderMilestoneStrip(milestones, year) {
-    var container = document.getElementById('milestoneStripContainer');
-    if (!container) return;
-    container.innerHTML = '';
-    if (!milestones || !milestones.length) return;
-
-    var rangeStart = new Date(year, 0, 1);
-    var rangeEnd = new Date(year + 2, 0, 1);
-    var totalMs = rangeEnd.getTime() - rangeStart.getTime();
-
-    var ruler = document.createElement('div');
-    ruler.className = 'milestone-ruler';
-    for (var m = 0; m < 24; m++) {
-      var tickDate = new Date(year, m, 1);
-      var tick = document.createElement('div');
-      tick.className = 'milestone-tick';
-      tick.style.left = ((tickDate.getTime() - rangeStart.getTime()) / totalMs * 100) + '%';
-      tick.textContent = (tickDate.getMonth() + 1) + '月' + (tickDate.getMonth() === 0 ? '（' + tickDate.getFullYear() + '）' : '');
-      ruler.appendChild(tick);
-    }
-    container.appendChild(ruler);
-
-    var items = milestones.map(function (ms) {
-      return { id: ms.id, name: ms.name, start: new Date(ms.start), end: new Date(ms.end) };
-    }).sort(function (a, b) { return a.start - b.start; });
-
-    var laneEnds = [];
-    items.forEach(function (item) {
-      var lane = -1;
-      for (var i = 0; i < laneEnds.length; i++) {
-        if (laneEnds[i] <= item.start) { lane = i; break; }
-      }
-      if (lane === -1) { lane = laneEnds.length; laneEnds.push(null); }
-      laneEnds[lane] = item.end;
-      item.lane = lane;
-    });
-
-    var rowHeight = 26;
-    var lanes = document.createElement('div');
-    lanes.className = 'milestone-lanes';
-    lanes.style.height = (laneEnds.length * rowHeight + 4) + 'px';
-
-    items.forEach(function (item) {
-      var leftPct = Math.max(0, (item.start.getTime() - rangeStart.getTime()) / totalMs * 100);
-      var rightPct = Math.min(100, (item.end.getTime() - rangeStart.getTime()) / totalMs * 100);
-      var widthPct = Math.max(rightPct - leftPct, 0.6);
-
-      var block = document.createElement('div');
-      block.className = 'milestone-block';
-      block.style.left = leftPct + '%';
-      block.style.width = widthPct + '%';
-      block.style.top = (item.lane * rowHeight) + 'px';
-      block.textContent = item.name;
-      block.title = item.name + '（' + toLocalIsoDate(item.start) + ' 〜 ' + toLocalIsoDate(item.end) + '）';
-      lanes.appendChild(block);
-    });
-
-    container.appendChild(lanes);
-  }
-
-  /**
-   * Annual calendar: only companies within ±2 months of the reference
-   * date are shown (same "in season" rule as the action panel), and rows
-   * sharing an identical period (same type + start + end - i.e. the same
-   * 決算日) are merged into a single bar listing every company that
-   * shares it, instead of one row per company.
-   */
-  function renderFilteredAnnualGantt() {
-    if (!latestAnnualData) return;
-
-    var referenceDate = getReferenceDate();
-    var fiscalEndById = {};
-    if (latestData) {
-      latestData.cases.forEach(function (c) {
-        fiscalEndById[c.customerId] = c.fiscalEndDate;
-      });
-    }
-
-    var rows = latestAnnualData.rows.filter(function (r) {
-      return isInSeason(fiscalEndById[r.customerId], referenceDate);
-    });
-
-    var groups = {};
-    var groupOrder = [];
-    rows.forEach(function (r) {
-      var key = r.type + '|' + r.start + '|' + r.end;
-      if (!groups[key]) {
-        groups[key] = { type: r.type, start: r.start, end: r.end, names: [] };
-        groupOrder.push(key);
-      }
-      groups[key].names.push(r.customerName);
-    });
-    var groupedRows = groupOrder.map(function (key, i) {
-      var g = groups[key];
-      var suffix = g.type === 'prep' ? '（準備期間）' : '（決算期間）';
-      return { id: 'group' + i, type: g.type, start: g.start, end: g.end, name: g.names.join('、') + suffix };
-    });
-
-    var todayMarker = [];
-    if (referenceDate && new Date(referenceDate).getFullYear() === latestAnnualData.year) {
-      todayMarker.push({ id: 'today_marker', type: 'today-marker', name: '', start: referenceDate, end: referenceDate });
-    }
-
-    var container = document.getElementById('annualGanttContainer');
-    container.innerHTML = '';
-
-    var tasks = groupedRows.concat(todayMarker).map(function (item) {
-      return {
-        id: item.id,
-        name: item.name,
-        start: item.start,
-        end: item.end,
-        progress: 0,
-        custom_class: 'type-' + item.type
-      };
-    });
-
-    if (!tasks.length) {
-      container.innerHTML = '<p class="muted">表示するデータがありません。顧客データを確認するか、「スプレッドシートと同期」をお試しください。</p>';
-      return;
-    }
-
-    try {
-      new Gantt('#annualGanttContainer', tasks, { view_mode: 'Month' });
-      drawTodayLine();
-    } catch (e) {
-      console.error('Annual gantt render failed', e);
-      container.innerHTML = '<p class="muted">年間カレンダーの表示に失敗しました: ' + escapeHtml(e.message) + '</p>';
-    }
-  }
-
-  /**
-   * Draws a full-height red vertical line at the reference date. There is
-   * no supported way to ask frappe-gantt for a date's pixel position, so
-   * instead we let it lay out an invisible same-day marker task (see
-   * `type-today-marker` in Stylesheet.html) and read back the x position
-   * it computed for that bar - accurate regardless of view mode/version
-   * quirks, since it reuses the library's own layout math.
-   */
-  function drawTodayLine() {
-    var wrapper = document.querySelector('#annualGanttContainer .bar-wrapper[data-id="today_marker"]');
-    if (!wrapper) return;
-    var bar = wrapper.querySelector('.bar');
-    var svg = document.querySelector('#annualGanttContainer svg');
-    if (!bar || !svg) return;
-
-    var x = bar.getBBox().x;
-    var height = svg.getBBox().height;
-
-    var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', x);
-    line.setAttribute('x2', x);
-    line.setAttribute('y1', 0);
-    line.setAttribute('y2', height);
-    line.setAttribute('class', 'today-line');
-    svg.appendChild(line);
-  }
-
-  function findTask(taskId) {
-    for (var i = 0; i < latestData.cases.length; i++) {
-      var tasks = latestData.cases[i].tasks;
-      for (var j = 0; j < tasks.length; j++) {
-        if (tasks[j].taskId === taskId) return tasks[j];
-      }
-    }
-    return null;
-  }
-
-  var editingTaskId = null;
-
-  function openEditModal(taskId) {
-    // Send any queued inline edit for this task first, so the modal opens
-    // with (and later saves on top of) the latest state instead of racing
-    // a debounced batch that hasn't gone out yet.
-    if (pendingUpdates[taskId]) flushPendingUpdates();
-
-    var task = findTask(taskId);
-    if (!task) return;
-    editingTaskId = taskId;
-
-    document.getElementById('editModalTitle').textContent = task.name;
-    document.getElementById('editTaskName').value = task.name;
-    document.getElementById('editPlannedStart').value = task.start;
-    document.getElementById('editPlannedEnd').value = task.end;
-    document.getElementById('editProgressStatus').value = task.progressStatus;
-    document.getElementById('editManualOverride').value = task.manualOverride || '';
-    document.getElementById('editNotes').value = task.notes || '';
-
-    document.getElementById('editModal').style.display = 'flex';
-  }
-
-  function closeEditModal() {
-    editingTaskId = null;
-    document.getElementById('editModal').style.display = 'none';
-  }
-
-  function onSaveEdit() {
-    if (!editingTaskId) return;
-    var taskId = editingTaskId;
-    var updates = {
-      taskName: document.getElementById('editTaskName').value,
-      plannedStart: document.getElementById('editPlannedStart').value,
-      plannedEnd: document.getElementById('editPlannedEnd').value,
-      progressStatus: document.getElementById('editProgressStatus').value,
-      manualOverride: document.getElementById('editManualOverride').value,
-      notes: document.getElementById('editNotes').value
-    };
-
-    delete pendingUpdates[taskId];
-    setLoading(true);
-    closeEditModal();
-    google.script.run
-      .withSuccessHandler(onDataLoaded)
-      .withFailureHandler(onError)
-      .saveTaskUpdate(taskId, updates, getReferenceDate());
   }
 
   function escapeHtml(value) {

@@ -47,9 +47,9 @@ function readCell_(row, colMap, field) {
 }
 
 /**
- * Returns all customers from the master sheet, with a resolved upcoming
- * fiscal year-end date (as a Date) attached. Rows missing a fiscal
- * month/date, or entirely blank, are skipped.
+ * Returns all customers from the master sheet, with their recurring
+ * fiscal year-end month/day resolved. Rows missing a fiscal month/date,
+ * or entirely blank, are skipped.
  */
 function getCustomers() {
   var sheet = getCustomerSheet_();
@@ -84,7 +84,6 @@ function getCustomers() {
 
     var monthDay = resolveFiscalMonthDay_(fiscalDateRaw, fiscalMonthRaw, today);
     if (!monthDay) continue;
-    var fiscalEndDate = nextFiscalYearEnd_(monthDay.month, monthDay.day, today);
 
     customers.push({
       id: 'row' + (i + 1),
@@ -92,9 +91,7 @@ function getCustomers() {
       customerName: customerName,
       staff: String(readCell_(row, colMap, 'staff') || '').trim(),
       fiscalMonth: monthDay.month,
-      fiscalDay: monthDay.day,
-      fiscalEndDate: fiscalEndDate,
-      fiscalEndDateIso: toIsoDateString_(fiscalEndDate)
+      fiscalDay: monthDay.day
     });
   }
 

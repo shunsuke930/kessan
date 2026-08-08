@@ -62,31 +62,27 @@ function normalizeDate_(value) {
 }
 
 /**
- * Given a recurring fiscal year-end expressed as month/day, finds the
- * occurrence whose filing window (fiscalDate + FILING_DEADLINE_OFFSET_DAYS)
- * is the soonest one that has not already fully closed, relative to
- * `today`. This keeps a case visible while it's still in its post
- * year-end filing window, and rolls forward to next year's date once the
- * filing deadline has passed.
+ * Given a recurring fiscal year-end expressed as month/day, returns the
+ * concrete date for that occurrence in a specific calendar year, clamping
+ * to the last day of the month if the day overflows it (e.g. Feb 30).
  */
-function nextFiscalYearEnd_(month, day, today) {
-  var candidates = [];
-  for (var yearOffset = -1; yearOffset <= 1; yearOffset++) {
-    var year = today.getFullYear() + yearOffset;
-    var candidate = new Date(year, month - 1, day);
-    if (candidate.getMonth() !== month - 1) {
-      // day overflowed (e.g. Feb 30) - clamp to last day of month.
-      candidate = new Date(year, month, 0);
-    }
-    candidates.push(startOfDay_(candidate));
+function fiscalDateInYear_(month, day, year) {
+  var candidate = new Date(year, month - 1, day);
+  if (candidate.getMonth() !== month - 1) {
+    candidate = new Date(year, month, 0);
   }
-  candidates.sort(function (a, b) { return a.getTime() - b.getTime(); });
+  return startOfDay_(candidate);
+}
 
-  for (var i = 0; i < candidates.length; i++) {
-    var deadline = addDays_(candidates[i], CONFIG.FILING_DEADLINE_OFFSET_DAYS);
-    if (deadline.getTime() >= today.getTime()) {
-      return candidates[i];
-    }
+/**
+ * Parses a month-picker value ("yyyy-MM") into the first day of that
+ * month; falls back to the current month if missing/malformed.
+ */
+function normalizeMonth_(value) {
+  if (value && /^\d{4}-\d{2}$/.test(value)) {
+    var parts = value.split('-');
+    return startOfDay_(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1));
   }
-  return candidates[candidates.length - 1];
+  var today = startOfDay_(new Date());
+  return startOfDay_(new Date(today.getFullYear(), today.getMonth(), 1));
 }

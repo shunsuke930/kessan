@@ -16,90 +16,49 @@ function include(filename) {
 }
 
 /**
- * Assembles everything the dashboard needs in one call: every customer's
- * current fiscal cycle, its generated tasks, and computed status colors.
- * Called from the client on load and after any sync/edit action.
- *
- * `referenceDateIso` (optional, "yyyy-MM-dd") lets the caller evaluate
- * every status as of a date other than today - e.g. to check "would this
- * case already be in the warning zone a month from now?". Defaults to
- * today when omitted or unparseable.
+ * Returns the task list for one calendar month: every customer whose
+ * fiscal year-end matches one of TASK_RULES (Constants.gs) relative to
+ * `referenceMonthIso` ("yyyy-MM", e.g. from a month-picker input),
+ * together with each task's stored progress/notes. Creates the
+ * underlying stored row on first view of a given month, so this alone is
+ * enough to keep the list current - there's no separate "sync" step.
+ * Defaults to the current month when `referenceMonthIso` is omitted or
+ * unparseable.
  */
-function getDashboardData(referenceDateIso) {
-  var customers = getCustomers();
-  var allTasks = getAllTaskRecords_();
-  var today = (referenceDateIso && normalizeDate_(referenceDateIso)) || startOfDay_(new Date());
+function getMonthlyTaskList(referenceMonthIso) {
+  var targetMonthDate = normalizeMonth_(referenceMonthIso);
+  var rows = getMonthlyTasks_(targetMonthDate);
 
-  var cases = customers.map(function (customer) {
-    var tasks = allTasks
-      .filter(function (t) {
-        return t.customerId === customer.id &&
-          t.fiscalEndDate && customer.fiscalEndDate &&
-          t.fiscalEndDate.getTime() === customer.fiscalEndDate.getTime();
-      })
-      .sort(function (a, b) { return a.order - b.order; });
-
-    var taskViews = tasks.map(function (t) {
-      return {
-        taskId: t.taskId,
-        taskKey: t.taskKey,
-        phase: t.phase,
-        name: t.taskName,
-        start: toIsoDateString_(t.plannedStart),
-        end: toIsoDateString_(t.plannedEnd),
-        progressStatus: t.progressStatus,
-        manualOverride: t.manualOverride,
-        notes: t.notes,
-        status: computeTaskStatus_(t.plannedEnd, t.progressStatus, t.manualOverride, today)
-      };
-    });
-
-    return {
-      customerId: customer.id,
-      customerName: customer.customerName,
-      staff: customer.staff,
-      fiscalEndDate: customer.fiscalEndDateIso,
-      status: computeCaseStatus_(customer.fiscalEndDate, today),
-      tasks: taskViews
-    };
+  rows.sort(function (a, b) {
+    if (a.taskName !== b.taskName) return a.taskName < b.taskName ? -1 : 1;
+    return a.customerName < b.customerName ? -1 : (a.customerName > b.customerName ? 1 : 0);
   });
 
-  cases.sort(function (a, b) { return a.fiscalEndDate < b.fiscalEndDate ? -1 : 1; });
-
   return {
-    referenceDate: toIsoDateString_(today),
-    caseCount: cases.length,
-    cases: cases,
+    referenceMonth: toIsoDateString_(targetMonthDate).slice(0, 7),
+    rowCount: rows.length,
+    rows: rows,
     version: APP_VERSION
   };
 }
 
 /**
- * Generates any missing tasks for customers on their current fiscal
- * cycle, then returns the refreshed dashboard data.
- */
-function runSyncAndGetDashboardData(referenceDateIso) {
-  syncTasksFromCustomers();
-  return getDashboardData(referenceDateIso);
-}
-
-/**
  * Applies an edit made from the dashboard UI to a single task, then
- * returns the refreshed dashboard data so the client can re-render.
+ * returns the refreshed task list so the client can re-render.
  */
-function saveTaskUpdate(taskId, updates, referenceDateIso) {
+function saveTaskUpdate(taskId, updates, referenceMonthIso) {
   updateTask(taskId, updates);
-  return getDashboardData(referenceDateIso);
+  return getMonthlyTaskList(referenceMonthIso);
 }
 
 /**
  * Applies a batch of task edits (see updateTasksBatch_ in TaskService.gs)
- * in one read/write round trip, then returns the refreshed dashboard
- * data. Used by the dashboard's debounced inline-edit queue so a burst of
+ * in one read/write round trip, then returns the refreshed task list.
+ * Used by the dashboard's debounced inline-edit queue so a burst of
  * status/comment changes across several rows becomes a single request
  * instead of one per field.
  */
-function saveTaskUpdatesBatch(updatesList, referenceDateIso) {
+function saveTaskUpdatesBatch(updatesList, referenceMonthIso) {
   updateTasksBatch_(updatesList);
-  return getDashboardData(referenceDateIso);
+  return getMonthlyTaskList(referenceMonthIso);
 }
