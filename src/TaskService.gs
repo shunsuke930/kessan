@@ -77,16 +77,22 @@ function getAllTaskRecords_() {
 function getMonthlyMatches_(customers, targetMonthDate) {
   var matches = [];
   TASK_RULES.forEach(function (rule) {
-    var ruleMonthDate = addMonths_(targetMonthDate, rule.monthOffset);
-    var ruleMonth = ruleMonthDate.getMonth() + 1;
-    var ruleYear = ruleMonthDate.getFullYear();
+    // Each offset names one candidate 決算月/決算年 for this rule; a
+    // customer matches the rule if their fiscal month equals any of them
+    // (e.g. 申告・納税 covers both the 1-month and 2-month mark after
+    // 決算日).
+    var candidates = rule.monthOffsets.map(function (offset) {
+      var d = addMonths_(targetMonthDate, offset);
+      return { month: d.getMonth() + 1, year: d.getFullYear() };
+    });
 
     customers.forEach(function (customer) {
-      if (customer.fiscalMonth !== ruleMonth) return;
+      var candidate = candidates.filter(function (c) { return c.month === customer.fiscalMonth; })[0];
+      if (!candidate) return;
       matches.push({
         customer: customer,
         rule: rule,
-        fiscalInstanceDate: fiscalDateInYear_(customer.fiscalMonth, customer.fiscalDay, ruleYear)
+        fiscalInstanceDate: fiscalDateInYear_(customer.fiscalMonth, customer.fiscalDay, candidate.year)
       });
     });
   });
