@@ -16,7 +16,7 @@ function getScriptProperty_(key, fallback) {
 // possible to check at a glance whether every file was actually pasted
 // into this Apps Script project - if the footer doesn't match what the
 // setup instructions say it should be, some file was missed.
-var APP_VERSION = '2026-08-08.1';
+var APP_VERSION = '2026-08-08.2';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
@@ -47,14 +47,17 @@ var CUSTOMER_COLUMN_ALIASES = {
 };
 
 // Default task template. Day offsets are relative to the fiscal year-end
-// date (決算日 = day 0). Kept to just two tasks per case - 決算準備
-// (90 days before through 決算日) and 申告・納税 (決算日 through the
-// 60-day filing deadline) - each tracked with a simple 未着手/対応中/完了
-// status, rather than a finer breakdown of sub-tasks (事前連絡・資料作成
-// など). `key` doubles as the フェーズ value shown in the task list UI.
+// date (決算日 = day 0). Each entry is a sub-task (`taskKey`/`name`)
+// grouped under one of two top-level phases (`phase`: 'preparation' =
+// 決算準備, 'settlement' = 申告・納税), which is what the task list's
+// フェーズ column/filter uses. The task list UI filters on both the
+// phase and the individual sub-task.
 var TASK_TEMPLATE = [
-  { key: 'preparation', name: '決算準備', startOffset: -90, endOffset: 0 },
-  { key: 'settlement', name: '申告・納税', startOffset: 1, endOffset: 60 }
+  { key: 'pre_contact', phase: 'preparation', name: '問い合わせ先への事前連絡（必要書類依頼など）', startOffset: -90, endOffset: -60 },
+  { key: 'bs_preparation', phase: 'preparation', name: '貸借対照表・資料作成', startOffset: -60, endOffset: -30 },
+  { key: 'return_preparation', phase: 'preparation', name: '申告書作成', startOffset: -30, endOffset: 0 },
+  { key: 'client_approval', phase: 'settlement', name: '問い合わせ先への確認・承認取得', startOffset: 0, endOffset: 30 },
+  { key: 'filing_payment', phase: 'settlement', name: '申告・納税', startOffset: 30, endOffset: 60 }
 ];
 
 var TASK_STATUS_VALUES = ['未着手', '対応中', '完了'];

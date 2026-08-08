@@ -43,6 +43,7 @@ function getDashboardData(referenceDateIso) {
       return {
         taskId: t.taskId,
         taskKey: t.taskKey,
+        phase: t.phase,
         name: t.taskName,
         start: toIsoDateString_(t.plannedStart),
         end: toIsoDateString_(t.plannedEnd),

@@ -6,7 +6,7 @@
 
 var TASK_HEADERS = [
   'taskId', 'customerId', 'customerName', 'fiscalEndDate', 'taskKey',
-  'taskName', 'order', 'plannedStart', 'plannedEnd', 'progressStatus',
+  'phase', 'taskName', 'order', 'plannedStart', 'plannedEnd', 'progressStatus',
   'manualOverride', 'notes', 'updatedAt'
 ];
 
@@ -91,6 +91,7 @@ function ensureTasksForCustomer_(customer, existingRecords) {
       customer.customerName,
       customer.fiscalEndDate,
       tpl.key,
+      tpl.phase,
       tpl.name,
       TASK_TEMPLATE.indexOf(tpl),
       addDays_(customer.fiscalEndDate, tpl.startOffset),
@@ -180,20 +181,32 @@ function deduplicateTasks() {
 }
 
 /**
- * Clears every stored task row (keeps the header). `ensureTasksForCustomer_`
- * is idempotent per customer + fiscal cycle, so it will never regenerate
- * tasks for a cycle that already has rows - meaning a TASK_TEMPLATE change
- * has no effect on cycles synced under the old template until those rows
- * are cleared. Run this manually once from the Apps Script editor's
- * function picker after changing TASK_TEMPLATE, then re-run "スプレッド
- * シートと同期" from the dashboard. Intentionally not exposed to the web
- * app UI, since it discards all progress/comments recorded so far.
+ * Clears every stored task row and rewrites the header row to match the
+ * current TASK_HEADERS. `ensureTasksForCustomer_` is idempotent per
+ * customer + fiscal cycle, so it will never regenerate tasks for a cycle
+ * that already has rows - meaning a TASK_TEMPLATE change has no effect on
+ * cycles synced under the old template until those rows are cleared. Run
+ * this manually once from the Apps Script editor's function picker after
+ * changing TASK_TEMPLATE, then re-run "スプレッドシートと同期" from the
+ * dashboard. Intentionally not exposed to the web app UI, since it
+ * discards all progress/comments recorded so far.
+ *
+ * Rewriting the header row (not just clearing data rows) means a
+ * TASK_HEADERS change (e.g. a new column) is picked up automatically the
+ * next time this runs, instead of silently leaving an old sheet with a
+ * stale header that no longer matches the code.
  */
 function resetAllTasks() {
   var sheet = getTasksSheet_();
   var lastRow = sheet.getLastRow();
+  var lastCol = Math.max(sheet.getLastColumn(), TASK_HEADERS.length);
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, TASK_HEADERS.length).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+  }
+  sheet.getRange(1, 1, 1, TASK_HEADERS.length).setValues([TASK_HEADERS]);
+  var extraCols = lastCol - TASK_HEADERS.length;
+  if (extraCols > 0) {
+    sheet.getRange(1, TASK_HEADERS.length + 1, 1, extraCols).clearContent();
   }
 }
 

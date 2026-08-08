@@ -42,7 +42,9 @@
           <thead>
             <tr>
               <th>フェーズ</th>
+              <th>タスク</th>
               <th>クライアント名</th>
+              <th>決算期</th>
               <th>担当者</th>
               <th>FROM</th>
               <th>TO</th>
@@ -55,7 +57,16 @@
                 <option value="preparation">決算準備</option>
                 <option value="settlement">申告・納税</option>
               </select></th>
+              <th><select id="filterTaskName">
+                <option value="">すべて</option>
+                <option value="問い合わせ先への事前連絡（必要書類依頼など）">問い合わせ先への事前連絡（必要書類依頼など）</option>
+                <option value="貸借対照表・資料作成">貸借対照表・資料作成</option>
+                <option value="申告書作成">申告書作成</option>
+                <option value="問い合わせ先への確認・承認取得">問い合わせ先への確認・承認取得</option>
+                <option value="申告・納税">申告・納税</option>
+              </select></th>
               <th><select id="filterCustomer"><option value="">すべて</option></select></th>
+              <th></th>
               <th></th>
               <th></th>
               <th></th>

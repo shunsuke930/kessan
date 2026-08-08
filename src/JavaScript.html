@@ -6,7 +6,7 @@
 
   var latestData = null;
   var latestAnnualData = null;
-  var actionFilters = { phase: '', customerName: '', progressStatus: '' };
+  var actionFilters = { phase: '', taskName: '', customerName: '', progressStatus: '' };
 
   // Inline edits (ステータス/コメント) are queued here and sent as one
   // saveTaskUpdatesBatch call after a short pause, instead of one
@@ -27,6 +27,7 @@
     document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
     document.getElementById('staffFilter').addEventListener('change', applyFilter);
     document.getElementById('filterPhase').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterTaskName').addEventListener('change', onActionFilterChange);
     document.getElementById('filterCustomer').addEventListener('change', onActionFilterChange);
     document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
@@ -38,9 +39,16 @@
 
   function onActionFilterChange() {
     actionFilters.phase = document.getElementById('filterPhase').value;
+    actionFilters.taskName = document.getElementById('filterTaskName').value;
     actionFilters.customerName = document.getElementById('filterCustomer').value;
     actionFilters.progressStatus = document.getElementById('filterStatus').value;
     renderActionPanel(getFilteredCases());
+  }
+
+  function formatFiscalPeriod(fiscalEndDateIso) {
+    if (!fiscalEndDateIso) return '';
+    var d = new Date(fiscalEndDateIso);
+    return d.getFullYear() + '年' + (d.getMonth() + 1) + '月期';
   }
 
   function staffColor(name) {
@@ -163,11 +171,11 @@
 
   /**
    * "タスク一覧": each in-season case (±2 months of the reference date)
-   * has exactly two tasks - 決算準備 and 申告・納税 (see TASK_TEMPLATE in
-   * Constants.gs) - each tracked with a simple 未着手/対応中/完了 status,
-   * shown as one dense, spreadsheet-style table with column filters
-   * (フェーズ/クライアント名/ステータス). Rows are tinted by the task's
-   * computed urgency (要注意/遅延); フェーズ doubles as the click target
+   * has its full set of sub-tasks from TASK_TEMPLATE (Constants.gs),
+   * grouped under one of two top-level phases (決算準備/申告・納税), each
+   * tracked with a simple 未着手/対応中/完了 status. Shown as one dense,
+   * spreadsheet-style table with column filters (フェーズ/タスク/
+   * クライアント名/ステータス). フェーズ列 doubles as the click target
    * that opens the detailed edit modal (dates, manual override, notes).
    */
   function buildActionRows(cases) {
@@ -177,8 +185,10 @@
       if (!isInSeason(c.fiscalEndDate, referenceDate)) return;
       c.tasks.forEach(function (t) {
         rows.push({
-          phase: t.taskKey,
+          phase: t.phase,
+          taskKey: t.taskKey,
           customerName: c.customerName,
+          fiscalEndDate: c.fiscalEndDate,
           staff: c.staff,
           taskId: t.taskId,
           taskName: t.name,
@@ -199,6 +209,7 @@
 
     var rows = allRows.filter(function (r) {
       if (actionFilters.phase && r.phase !== actionFilters.phase) return false;
+      if (actionFilters.taskName && r.taskName !== actionFilters.taskName) return false;
       if (actionFilters.customerName && r.customerName !== actionFilters.customerName) return false;
       if (actionFilters.progressStatus && r.progressStatus !== actionFilters.progressStatus) return false;
       return true;
@@ -220,16 +231,21 @@
 
     rows.forEach(function (r) {
       var tr = document.createElement('tr');
-      tr.className = r.status === 'delayed' ? 'status-row-delayed' : (r.status === 'warning' ? 'status-row-warning' : '');
 
       var phaseCell = document.createElement('td');
-      phaseCell.textContent = PHASE_LABEL[r.phase] || r.taskName;
+      phaseCell.textContent = PHASE_LABEL[r.phase] || r.phase;
       phaseCell.className = 'clickable-cell';
       phaseCell.title = 'クリックで期限や進捗を編集';
       phaseCell.addEventListener('click', function () { openEditModal(r.taskId); });
 
+      var taskNameCell = document.createElement('td');
+      taskNameCell.textContent = r.taskName;
+
       var nameCell = document.createElement('td');
       nameCell.textContent = r.customerName;
+
+      var fiscalPeriodCell = document.createElement('td');
+      fiscalPeriodCell.textContent = formatFiscalPeriod(r.fiscalEndDate);
 
       var staffCell = document.createElement('td');
       var staffChip = document.createElement('span');
@@ -276,7 +292,7 @@
       });
       commentCell.appendChild(commentInput);
 
-      [phaseCell, nameCell, staffCell, fromCell, toCell, statusCell, commentCell]
+      [phaseCell, taskNameCell, nameCell, fiscalPeriodCell, staffCell, fromCell, toCell, statusCell, commentCell]
         .forEach(function (td) { tr.appendChild(td); });
       body.appendChild(tr);
     });
