@@ -41,16 +41,14 @@ var CUSTOMER_COLUMN_ALIASES = {
 };
 
 // Default task template. Day offsets are relative to the fiscal year-end
-// date (決算日 = day 0). The exact allocation between tasks is an open
-// item (要件定義書 6.); this even split across the 90-day-before to
-// 60-day-after window is a starting default that can be adjusted per
-// case after generation.
+// date (決算日 = day 0). Kept to just two tasks per case - 決算準備
+// (90 days before through 決算日) and 申告・納税 (決算日 through the
+// 60-day filing deadline) - each tracked with a simple 未着手/対応中/完了
+// status, rather than a finer breakdown of sub-tasks (事前連絡・資料作成
+// など). `key` doubles as the フェーズ value shown in the task list UI.
 var TASK_TEMPLATE = [
-  { key: 'pre_contact', name: '問い合わせ先への事前連絡（必要書類依頼など）', startOffset: -90, endOffset: -60 },
-  { key: 'bs_preparation', name: '貸借対照表・資料作成', startOffset: -60, endOffset: -30 },
-  { key: 'return_preparation', name: '申告書作成', startOffset: -30, endOffset: 0 },
-  { key: 'client_approval', name: '問い合わせ先への確認・承認取得', startOffset: 0, endOffset: 30 },
-  { key: 'filing_payment', name: '申告・納税', startOffset: 30, endOffset: 60 }
+  { key: 'preparation', name: '決算準備', startOffset: -90, endOffset: 0 },
+  { key: 'settlement', name: '申告・納税', startOffset: 1, endOffset: 60 }
 ];
 
 var TASK_STATUS_VALUES = ['未着手', '対応中', '完了'];
@@ -67,6 +65,7 @@ var CASE_STATUS = {
 // (headcount, insurance union, individual fiscal year, etc.), so treat
 // them as a rough orientation guide, not an authoritative deadline list.
 var ANNUAL_MILESTONES = [
+  { key: 'kakutei_shinkoku', name: '確定申告', startMonth: 1, startDay: 1, endMonth: 3, endDay: 15 },
   { key: 'hotei_chosho', name: '法定調書・給与支払報告書 提出期限', startMonth: 1, startDay: 31, endMonth: 1, endDay: 31 },
   { key: 'shokyaku_shisan', name: '固定資産税(償却資産)申告期限', startMonth: 1, startDay: 31, endMonth: 1, endDay: 31 },
   { key: 'rodohoken_koshin', name: '労働保険 年度更新', startMonth: 6, startDay: 1, endMonth: 7, endDay: 10 },

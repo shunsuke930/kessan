@@ -1,18 +1,12 @@
 <script>
-  var TASK_CATEGORY_LABEL = {
-    pre_contact: '事前連絡',
-    bs_preparation: '資料作成',
-    return_preparation: '申告書',
-    client_approval: '確認取得',
-    filing_payment: '申告納税'
-  };
+  var PHASE_LABEL = { preparation: '決算準備', settlement: '申告・納税' };
   var STAFF_COLORS = ['#fde2e2', '#fdebc8', '#e2f0d9', '#dbeafe', '#ede9fe', '#fce7f3', '#e0f2fe', '#fef3c7'];
   var PROGRESS_COLORS = { '未着手': '#e0e2e5', '対応中': '#fdebc8', '完了': '#2f3542' };
   var PROGRESS_TEXT_COLORS = { '未着手': '#333', '対応中': '#7a4a00', '完了': '#fff' };
 
   var latestData = null;
   var latestAnnualData = null;
-  var actionFilters = { phase: '', customerName: '', category: '', progressStatus: '' };
+  var actionFilters = { phase: '', customerName: '', progressStatus: '' };
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('referenceDateInput').value = toLocalIsoDate(new Date());
@@ -25,7 +19,6 @@
     document.getElementById('staffFilter').addEventListener('change', applyFilter);
     document.getElementById('filterPhase').addEventListener('change', onActionFilterChange);
     document.getElementById('filterCustomer').addEventListener('change', onActionFilterChange);
-    document.getElementById('filterCategory').addEventListener('change', onActionFilterChange);
     document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
@@ -34,7 +27,6 @@
   function onActionFilterChange() {
     actionFilters.phase = document.getElementById('filterPhase').value;
     actionFilters.customerName = document.getElementById('filterCustomer').value;
-    actionFilters.category = document.getElementById('filterCategory').value;
     actionFilters.progressStatus = document.getElementById('filterStatus').value;
     renderActionPanel(getFilteredCases());
   }
@@ -143,26 +135,24 @@
   }
 
   /**
-   * "タスク一覧": every task belonging to a case currently within ±2
-   * months of the reference date (i.e. "in season"), as one dense,
-   * spreadsheet-style table with column filters (フェーズ/クライアント名/
-   * 系統/ステータス) instead of pre-grouped blocks - closer to how the
-   * team already works in their spreadsheet. Rows are tinted by the
-   * task's computed urgency (要注意/遅延); ステータス itself is the
-   * editable progress state (未着手/対応中/完了).
+   * "タスク一覧": each in-season case (±2 months of the reference date)
+   * has exactly two tasks - 決算準備 and 申告・納税 (see TASK_TEMPLATE in
+   * Constants.gs) - each tracked with a simple 未着手/対応中/完了 status,
+   * shown as one dense, spreadsheet-style table with column filters
+   * (フェーズ/クライアント名/ステータス). Rows are tinted by the task's
+   * computed urgency (要注意/遅延); フェーズ doubles as the click target
+   * that opens the detailed edit modal (dates, manual override, notes).
    */
   function buildActionRows(cases) {
     var referenceDate = getReferenceDate();
     var rows = [];
     cases.forEach(function (c) {
       if (!isInSeason(c.fiscalEndDate, referenceDate)) return;
-      var phase = referenceDate && referenceDate <= c.fiscalEndDate ? 'prep' : 'settlement';
       c.tasks.forEach(function (t) {
         rows.push({
-          phase: phase,
+          phase: t.taskKey,
           customerName: c.customerName,
           staff: c.staff,
-          category: t.taskKey,
           taskId: t.taskId,
           taskName: t.name,
           start: t.start,
@@ -183,7 +173,6 @@
     var rows = allRows.filter(function (r) {
       if (actionFilters.phase && r.phase !== actionFilters.phase) return false;
       if (actionFilters.customerName && r.customerName !== actionFilters.customerName) return false;
-      if (actionFilters.category && r.category !== actionFilters.category) return false;
       if (actionFilters.progressStatus && r.progressStatus !== actionFilters.progressStatus) return false;
       return true;
     });
@@ -199,7 +188,10 @@
       tr.className = r.status === 'delayed' ? 'status-row-delayed' : (r.status === 'warning' ? 'status-row-warning' : '');
 
       var phaseCell = document.createElement('td');
-      phaseCell.textContent = r.phase === 'prep' ? '準備中' : '決算中';
+      phaseCell.textContent = PHASE_LABEL[r.phase] || r.taskName;
+      phaseCell.className = 'clickable-cell';
+      phaseCell.title = 'クリックで期限や進捗を編集';
+      phaseCell.addEventListener('click', function () { openEditModal(r.taskId); });
 
       var nameCell = document.createElement('td');
       nameCell.textContent = r.customerName;
@@ -210,15 +202,6 @@
       staffChip.style.background = staffColor(r.staff);
       staffChip.textContent = r.staff || '-';
       staffCell.appendChild(staffChip);
-
-      var categoryCell = document.createElement('td');
-      categoryCell.textContent = TASK_CATEGORY_LABEL[r.category] || r.category;
-
-      var taskCell = document.createElement('td');
-      taskCell.textContent = r.taskName;
-      taskCell.className = 'clickable-cell';
-      taskCell.title = 'クリックで期限や進捗を編集';
-      taskCell.addEventListener('click', function () { openEditModal(r.taskId); });
 
       var fromCell = document.createElement('td');
       fromCell.textContent = r.start;
@@ -256,7 +239,7 @@
       });
       commentCell.appendChild(commentInput);
 
-      [phaseCell, nameCell, staffCell, categoryCell, taskCell, fromCell, toCell, statusCell, commentCell]
+      [phaseCell, nameCell, staffCell, fromCell, toCell, statusCell, commentCell]
         .forEach(function (td) { tr.appendChild(td); });
       body.appendChild(tr);
     });
@@ -269,7 +252,6 @@
 
   function populateActionFilterOptions(rows) {
     populateFilterSelect('filterCustomer', uniqueSorted(rows.map(function (r) { return r.customerName; })));
-    populateFilterSelect('filterCategory', uniqueSorted(rows.map(function (r) { return r.category; })), TASK_CATEGORY_LABEL);
   }
 
   function uniqueSorted(values) {

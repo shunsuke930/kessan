@@ -126,6 +126,24 @@ function syncTasksFromCustomers() {
 }
 
 /**
+ * Clears every stored task row (keeps the header). `ensureTasksForCustomer_`
+ * is idempotent per customer + fiscal cycle, so it will never regenerate
+ * tasks for a cycle that already has rows - meaning a TASK_TEMPLATE change
+ * has no effect on cycles synced under the old template until those rows
+ * are cleared. Run this manually once from the Apps Script editor's
+ * function picker after changing TASK_TEMPLATE, then re-run "スプレッド
+ * シートと同期" from the dashboard. Intentionally not exposed to the web
+ * app UI, since it discards all progress/comments recorded so far.
+ */
+function resetAllTasks() {
+  var sheet = getTasksSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, TASK_HEADERS.length).clearContent();
+  }
+}
+
+/**
  * Updates editable fields on a single task row (要件定義書 3.2: generated
  * tasks can be individually adjusted). `updates` may include taskName,
  * plannedStart, plannedEnd, progressStatus, manualOverride, notes.
