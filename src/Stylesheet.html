@@ -77,27 +77,6 @@
 
   main { padding: 20px 24px 60px; }
 
-  .filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 16px;
-  }
-  .staff-filter-field {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #444;
-  }
-  .staff-filter-field select {
-    padding: 6px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    font-size: 13px;
-    background: #fff;
-  }
-
   .action-section {
     margin-bottom: 28px;
     background: #fff;
@@ -136,8 +115,9 @@
     background: #fff;
   }
 
-  #actionTableBody tr.status-row-delayed { background: #fdecea; }
-  #actionTableBody tr.status-row-warning { background: #fff8e1; }
+  #actionTableBody tr.row-overdue { background: #fdecea; }
+  #actionTableBody tr.row-done { background: #f5f5f5; }
+  #actionTableBody tr.row-done td { color: #9aa0a6; }
   #actionTableBody tr:hover { filter: brightness(0.97); }
 
   .chip {

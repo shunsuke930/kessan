@@ -16,7 +16,7 @@ function getScriptProperty_(key, fallback) {
 // possible to check at a glance whether every file was actually pasted
 // into this Apps Script project - if the footer doesn't match what the
 // setup instructions say it should be, some file was missed.
-var APP_VERSION = '2026-08-08.2';
+var APP_VERSION = '2026-08-08.3';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
@@ -46,19 +46,29 @@ var CUSTOMER_COLUMN_ALIASES = {
   staff: ['担当者']
 };
 
-// Default task template. Day offsets are relative to the fiscal year-end
-// date (決算日 = day 0). Each entry is a sub-task (`taskKey`/`name`)
+// Default task template. Each entry is a sub-task (`taskKey`/`name`)
 // grouped under one of two top-level phases (`phase`: 'preparation' =
 // 決算準備, 'settlement' = 申告・納税), which is what the task list's
-// フェーズ column/filter uses. The task list UI filters on both the
-// phase and the individual sub-task.
+// フェーズ column/filter uses (individual sub-tasks are filtered
+// separately via the タスク column). Only the initial pre-contact task
+// counts as 決算準備 - everything from resulting document prep onward is
+// 申告・納税.
 var TASK_TEMPLATE = [
-  { key: 'pre_contact', phase: 'preparation', name: '問い合わせ先への事前連絡（必要書類依頼など）', startOffset: -90, endOffset: -60 },
-  { key: 'bs_preparation', phase: 'preparation', name: '貸借対照表・資料作成', startOffset: -60, endOffset: -30 },
-  { key: 'return_preparation', phase: 'preparation', name: '申告書作成', startOffset: -30, endOffset: 0 },
-  { key: 'client_approval', phase: 'settlement', name: '問い合わせ先への確認・承認取得', startOffset: 0, endOffset: 30 },
-  { key: 'filing_payment', phase: 'settlement', name: '申告・納税', startOffset: 30, endOffset: 60 }
+  { key: 'pre_contact', phase: 'preparation', name: '問い合わせ先への事前連絡（必要書類依頼など）' },
+  { key: 'bs_preparation', phase: 'settlement', name: '貸借対照表・資料作成' },
+  { key: 'return_preparation', phase: 'settlement', name: '申告書作成' },
+  { key: 'client_approval', phase: 'settlement', name: '問い合わせ先への確認・承認取得' },
+  { key: 'filing_payment', phase: 'settlement', name: '申告・納税' }
 ];
+
+// Every sub-task under a given phase shares that phase's start/end window
+// (計算月単位, calendar months relative to 決算日 = month 0), rather than
+// each sub-task having its own fine-grained deadline: 決算準備 spans the
+// 2 months up to 決算日; 申告・納税 spans the 2 months after it.
+var PHASE_DATE_WINDOWS = {
+  preparation: { startMonths: -2, endMonths: 0 },
+  settlement: { startMonths: 0, endMonths: 2 }
+};
 
 var TASK_STATUS_VALUES = ['未着手', '対応中', '完了'];
 

@@ -6,7 +6,7 @@
 
   var latestData = null;
   var latestAnnualData = null;
-  var actionFilters = { phase: '', taskName: '', customerName: '', progressStatus: '' };
+  var actionFilters = { phase: '', taskName: '', customerName: '', fiscalPeriod: '', staff: '', progressStatus: '' };
 
   // Inline edits (ステータス/コメント) are queued here and sent as one
   // saveTaskUpdatesBatch call after a short pause, instead of one
@@ -25,10 +25,11 @@
     document.getElementById('syncButton').addEventListener('click', onSync);
     document.getElementById('referenceDateInput').addEventListener('change', load);
     document.getElementById('annualYearInput').addEventListener('change', loadAnnualView);
-    document.getElementById('staffFilter').addEventListener('change', applyFilter);
     document.getElementById('filterPhase').addEventListener('change', onActionFilterChange);
     document.getElementById('filterTaskName').addEventListener('change', onActionFilterChange);
     document.getElementById('filterCustomer').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterFiscalPeriod').addEventListener('change', onActionFilterChange);
+    document.getElementById('filterStaff').addEventListener('change', onActionFilterChange);
     document.getElementById('filterStatus').addEventListener('change', onActionFilterChange);
     document.getElementById('cancelEditButton').addEventListener('click', closeEditModal);
     document.getElementById('saveEditButton').addEventListener('click', onSaveEdit);
@@ -41,8 +42,10 @@
     actionFilters.phase = document.getElementById('filterPhase').value;
     actionFilters.taskName = document.getElementById('filterTaskName').value;
     actionFilters.customerName = document.getElementById('filterCustomer').value;
+    actionFilters.fiscalPeriod = document.getElementById('filterFiscalPeriod').value;
+    actionFilters.staff = document.getElementById('filterStaff').value;
     actionFilters.progressStatus = document.getElementById('filterStatus').value;
-    renderActionPanel(getFilteredCases());
+    renderActionPanel(latestData ? latestData.cases : []);
   }
 
   function formatFiscalPeriod(fiscalEndDateIso) {
@@ -132,40 +135,7 @@
     document.getElementById('referenceDateLabel').textContent = '基準日: ' + data.referenceDate + '（' + data.caseCount + '件）';
     var versionLabel = document.getElementById('appVersionLabel');
     if (versionLabel && data.version) versionLabel.textContent = 'バージョン: ' + data.version;
-    populateStaffFilter(data.cases);
-    applyFilter();
-  }
-
-  function getSelectedStaff() {
-    return document.getElementById('staffFilter').value || '';
-  }
-
-  function populateStaffFilter(cases) {
-    var select = document.getElementById('staffFilter');
-    var previous = select.value;
-    var staffSet = {};
-    cases.forEach(function (c) { if (c.staff) staffSet[c.staff] = true; });
-    var staffNames = Object.keys(staffSet).sort();
-
-    select.innerHTML = '<option value="">すべての担当者</option>' +
-      staffNames.map(function (s) {
-        return '<option value="' + escapeHtml(s) + '">' + escapeHtml(s) + '</option>';
-      }).join('');
-    if (staffNames.indexOf(previous) !== -1) select.value = previous;
-  }
-
-  function getFilteredCases() {
-    if (!latestData) return [];
-    var staff = getSelectedStaff();
-    if (!staff) return latestData.cases;
-    return latestData.cases.filter(function (c) { return c.staff === staff; });
-  }
-
-  function applyFilter() {
-    var filtered = getFilteredCases();
-    document.getElementById('filteredCountLabel').textContent =
-      latestData ? filtered.length + ' / ' + latestData.cases.length + ' 件を表示中' : '';
-    renderActionPanel(filtered);
+    renderActionPanel(data.cases);
     renderFilteredAnnualGantt();
   }
 
@@ -189,6 +159,7 @@
           taskKey: t.taskKey,
           customerName: c.customerName,
           fiscalEndDate: c.fiscalEndDate,
+          fiscalPeriod: formatFiscalPeriod(c.fiscalEndDate),
           staff: c.staff,
           taskId: t.taskId,
           taskName: t.name,
@@ -211,10 +182,14 @@
       if (actionFilters.phase && r.phase !== actionFilters.phase) return false;
       if (actionFilters.taskName && r.taskName !== actionFilters.taskName) return false;
       if (actionFilters.customerName && r.customerName !== actionFilters.customerName) return false;
+      if (actionFilters.fiscalPeriod && r.fiscalPeriod !== actionFilters.fiscalPeriod) return false;
+      if (actionFilters.staff && r.staff !== actionFilters.staff) return false;
       if (actionFilters.progressStatus && r.progressStatus !== actionFilters.progressStatus) return false;
       return true;
     });
     rows.sort(function (a, b) { return a.end < b.end ? -1 : (a.end > b.end ? 1 : 0); });
+
+    var referenceDate = getReferenceDate();
 
     // A batched save re-renders this table once the write completes; if the
     // user is still focused on a status/comment cell at that moment,
@@ -231,6 +206,7 @@
 
     rows.forEach(function (r) {
       var tr = document.createElement('tr');
+      tr.className = rowStatusClass(r, referenceDate);
 
       var phaseCell = document.createElement('td');
       phaseCell.textContent = PHASE_LABEL[r.phase] || r.phase;
@@ -305,8 +281,34 @@
     select.style.color = PROGRESS_TEXT_COLORS[value] || '#333';
   }
 
+  // 完了 rows are greyed out; unfinished rows past their own 期限 (relative
+  // to 基準日) are tinted light red. Completed always wins even if the
+  // 期限 has technically passed, since there's nothing left to flag.
+  function rowStatusClass(r, referenceDate) {
+    if (r.progressStatus === '完了') return 'row-done';
+    if (referenceDate && r.end && r.end < referenceDate) return 'row-overdue';
+    return '';
+  }
+
   function populateActionFilterOptions(rows) {
     populateFilterSelect('filterCustomer', uniqueSorted(rows.map(function (r) { return r.customerName; })));
+    populateFilterSelect('filterFiscalPeriod', uniqueFiscalPeriods(rows));
+    populateFilterSelect('filterStaff', uniqueSorted(rows.map(function (r) { return r.staff; })));
+  }
+
+  // Fiscal periods ("2026年6月期") need date order, not string order
+  // (string sort would put "2026年12月期" before "2026年6月期").
+  function uniqueFiscalPeriods(rows) {
+    var seen = {};
+    var items = [];
+    rows.forEach(function (r) {
+      if (r.fiscalPeriod && !seen[r.fiscalPeriod]) {
+        seen[r.fiscalPeriod] = true;
+        items.push({ label: r.fiscalPeriod, date: r.fiscalEndDate });
+      }
+    });
+    items.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    return items.map(function (i) { return i.label; });
   }
 
   function uniqueSorted(values) {
@@ -532,18 +534,14 @@
     if (!latestAnnualData) return;
 
     var referenceDate = getReferenceDate();
-    var staff = getSelectedStaff();
     var fiscalEndById = {};
-    var staffById = {};
     if (latestData) {
       latestData.cases.forEach(function (c) {
         fiscalEndById[c.customerId] = c.fiscalEndDate;
-        staffById[c.customerId] = c.staff;
       });
     }
 
     var rows = latestAnnualData.rows.filter(function (r) {
-      if (staff && staffById[r.customerId] !== staff) return false;
       return isInSeason(fiscalEndById[r.customerId], referenceDate);
     });
 

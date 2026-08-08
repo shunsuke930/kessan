@@ -85,6 +85,7 @@ function ensureTasksForCustomer_(customer, existingRecords) {
   var sheet = getTasksSheet_();
   var now = new Date();
   var rows = TASK_TEMPLATE.map(function (tpl) {
+    var window = PHASE_DATE_WINDOWS[tpl.phase];
     return [
       Utilities.getUuid(),
       customer.id,
@@ -94,8 +95,8 @@ function ensureTasksForCustomer_(customer, existingRecords) {
       tpl.phase,
       tpl.name,
       TASK_TEMPLATE.indexOf(tpl),
-      addDays_(customer.fiscalEndDate, tpl.startOffset),
-      addDays_(customer.fiscalEndDate, tpl.endOffset),
+      addMonths_(customer.fiscalEndDate, window.startMonths),
+      addMonths_(customer.fiscalEndDate, window.endMonths),
       '未着手',
       '',
       '',

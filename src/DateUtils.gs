@@ -15,6 +15,22 @@ function addDays_(date, days) {
   return startOfDay_(d);
 }
 
+/**
+ * Adds calendar months (not a fixed day count) to a date, clamping to the
+ * last day of the target month if the original day-of-month overflows it
+ * (e.g. Jan 31 + 1 month -> Feb 28/29, not Mar 3).
+ */
+function addMonths_(date, months) {
+  var year = date.getFullYear();
+  var month = date.getMonth() + months;
+  var day = date.getDate();
+  var candidate = new Date(year, month, day);
+  if (candidate.getMonth() !== ((month % 12) + 12) % 12) {
+    candidate = new Date(year, month + 1, 0);
+  }
+  return startOfDay_(candidate);
+}
+
 function daysBetween_(from, to) {
   var msPerDay = 24 * 60 * 60 * 1000;
   return Math.round((startOfDay_(to).getTime() - startOfDay_(from).getTime()) / msPerDay);

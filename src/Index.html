@@ -24,15 +24,6 @@
   <div id="errorBox" class="error-box" style="display:none;"></div>
 
   <main id="app" style="display:none;">
-    <section class="filter-bar">
-      <label class="staff-filter-field">担当者で絞り込み
-        <select id="staffFilter">
-          <option value="">すべての担当者</option>
-        </select>
-      </label>
-      <span id="filteredCountLabel" class="muted"></span>
-    </section>
-
     <section class="action-section">
       <h2>タスク一覧</h2>
       <p class="muted">基準日の前後2ヶ月以内に決算を迎える会社のタスクを一覧表示します。列見出し下のプルダウンで絞り込めます。</p>
@@ -46,8 +37,8 @@
               <th>クライアント名</th>
               <th>決算期</th>
               <th>担当者</th>
-              <th>FROM</th>
-              <th>TO</th>
+              <th>開始</th>
+              <th>期限</th>
               <th>ステータス</th>
               <th>コメント</th>
             </tr>
@@ -66,8 +57,8 @@
                 <option value="申告・納税">申告・納税</option>
               </select></th>
               <th><select id="filterCustomer"><option value="">すべて</option></select></th>
-              <th></th>
-              <th></th>
+              <th><select id="filterFiscalPeriod"><option value="">すべて</option></select></th>
+              <th><select id="filterStaff"><option value="">すべて</option></select></th>
               <th></th>
               <th></th>
               <th><select id="filterStatus">
