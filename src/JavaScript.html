@@ -70,10 +70,18 @@
   }
 
   function onSync() {
+    if (document.getElementById('syncButton').disabled) return;
+    document.getElementById('syncButton').disabled = true;
     setLoading(true);
     google.script.run
-      .withSuccessHandler(onDataLoaded)
-      .withFailureHandler(onError)
+      .withSuccessHandler(function (data) {
+        document.getElementById('syncButton').disabled = false;
+        onDataLoaded(data);
+      })
+      .withFailureHandler(function (error) {
+        document.getElementById('syncButton').disabled = false;
+        onError(error);
+      })
       .runSyncAndGetDashboardData(getReferenceDate());
   }
 

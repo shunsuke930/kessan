@@ -109,20 +109,34 @@ function ensureTasksForCustomer_(customer, existingRecords) {
  * Generates tasks for every customer that doesn't have a set yet for
  * their current fiscal cycle. Safe to run repeatedly (e.g. on a daily
  * trigger, or manually from the dashboard's "sync" action).
+ *
+ * This is a shared web app (~10 staff, everyone can trigger 同期), so a
+ * script lock serializes concurrent calls: ensureTasksForCustomer_'s
+ * idempotency check reads existingRecords once up front, and without a
+ * lock, two syncs starting close together (a double-click, or two people
+ * clicking around the same time) can both read "not generated yet" before
+ * either has written, each appending a full set of tasks - duplicating
+ * every task for every affected customer.
  */
 function syncTasksFromCustomers() {
-  var customers = getCustomers();
-  var existingRecords = getAllTaskRecords_();
-  var generatedCount = 0;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var customers = getCustomers();
+    var existingRecords = getAllTaskRecords_();
+    var generatedCount = 0;
 
-  customers.forEach(function (customer) {
-    if (ensureTasksForCustomer_(customer, existingRecords)) generatedCount++;
-  });
+    customers.forEach(function (customer) {
+      if (ensureTasksForCustomer_(customer, existingRecords)) generatedCount++;
+    });
 
-  return {
-    customerCount: customers.length,
-    generatedCount: generatedCount
-  };
+    return {
+      customerCount: customers.length,
+      generatedCount: generatedCount
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
