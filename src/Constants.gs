@@ -1,22 +1,25 @@
 /**
- * Central configuration and constants for the settlement dashboard.
+ * Central configuration and constants for the monthly tax-task list tool.
+ * There is no web app - the task list lives on a spreadsheet tab
+ * (TaskService.gs/Menu.gs), edited directly by staff.
  *
  * CUSTOMER_SPREADSHEET_ID / CUSTOMER_SHEET_NAME point at the existing
- * customer-master spreadsheet, which this app only ever reads from.
- * Set them via Script Properties (File > Project properties > Script
- * properties), not by editing this file, so the deployed script never
- * needs a source change to point at a different sheet.
+ * customer-master spreadsheet, which this script only ever reads from.
+ * Set them via Script Properties (Project Settings > Script properties),
+ * not by editing this file, so a source change is never needed just to
+ * point at a different sheet.
  */
 function getScriptProperty_(key, fallback) {
   var value = PropertiesService.getScriptProperties().getProperty(key);
   return value ? value : fallback;
 }
 
-// Bumped on every code change and shown in the dashboard's footer, so it's
-// possible to check at a glance whether every file was actually pasted
-// into this Apps Script project - if the footer doesn't match what the
-// setup instructions say it should be, some file was missed.
-var APP_VERSION = '2026-08-08.5';
+// Bumped on every code change and shown via the custom menu's "バージョン
+// 確認" item (Menu.gs), so it's possible to check at a glance whether
+// every file was actually pasted into this Apps Script project - if the
+// version shown doesn't match what the setup instructions say it should
+// be, some file was missed.
+var APP_VERSION = '2026-08-09.1';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).

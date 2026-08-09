@@ -4,13 +4,18 @@
  */
 
 function getCustomerSpreadsheet_() {
-  if (!CONFIG.CUSTOMER_SPREADSHEET_ID) {
-    throw new Error(
-      'CUSTOMER_SPREADSHEET_ID is not set. Configure it in ' +
-      'Project Settings > Script properties.'
-    );
+  if (CONFIG.CUSTOMER_SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(CONFIG.CUSTOMER_SPREADSHEET_ID);
   }
-  return SpreadsheetApp.openById(CONFIG.CUSTOMER_SPREADSHEET_ID);
+  // Falls back to whichever spreadsheet this script is bound to/running
+  // against, so a setup that keeps everything (customer master + 案件
+  // タスク) in one file doesn't need CUSTOMER_SPREADSHEET_ID set at all.
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  throw new Error(
+    'CUSTOMER_SPREADSHEET_ID が未設定で、このスクリプトが紐づくスプレッドシートも' +
+    '見つかりません。プロジェクトの設定 > スクリプト プロパティ で設定してください。'
+  );
 }
 
 function getCustomerSheet_() {

@@ -9,12 +9,6 @@ function startOfDay_(date) {
   return d;
 }
 
-function addDays_(date, days) {
-  var d = new Date(date.getTime());
-  d.setDate(d.getDate() + days);
-  return startOfDay_(d);
-}
-
 /**
  * Adds calendar months (not a fixed day count) to a date, clamping to the
  * last day of the target month if the original day-of-month overflows it
@@ -29,16 +23,6 @@ function addMonths_(date, months) {
     candidate = new Date(year, month + 1, 0);
   }
   return startOfDay_(candidate);
-}
-
-function daysBetween_(from, to) {
-  var msPerDay = 24 * 60 * 60 * 1000;
-  return Math.round((startOfDay_(to).getTime() - startOfDay_(from).getTime()) / msPerDay);
-}
-
-function toIsoDateString_(date) {
-  if (!date) return '';
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 /**
@@ -72,17 +56,4 @@ function fiscalDateInYear_(month, day, year) {
     candidate = new Date(year, month, 0);
   }
   return startOfDay_(candidate);
-}
-
-/**
- * Parses a month-picker value ("yyyy-MM") into the first day of that
- * month; falls back to the current month if missing/malformed.
- */
-function normalizeMonth_(value) {
-  if (value && /^\d{4}-\d{2}$/.test(value)) {
-    var parts = value.split('-');
-    return startOfDay_(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1));
-  }
-  var today = startOfDay_(new Date());
-  return startOfDay_(new Date(today.getFullYear(), today.getMonth(), 1));
 }
