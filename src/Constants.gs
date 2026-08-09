@@ -19,7 +19,7 @@ function getScriptProperty_(key, fallback) {
 // every file was actually pasted into this Apps Script project - if the
 // version shown doesn't match what the setup instructions say it should
 // be, some file was missed.
-var APP_VERSION = '2026-08-09.1';
+var APP_VERSION = '2026-08-09.2';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
@@ -58,10 +58,15 @@ var CUSTOMER_COLUMN_ALIASES = {
 // deadline is exactly 2 months after 決算日, so both the 1-month and
 // 2-month mark stay on the list). 納税予想 = 6 months before 決算日
 // (roughly the fiscal year's halfway point, used to forecast 中間納付).
+// `description` is plain-Japanese wording shown in the auto-generated
+// "抽出ルールの説明" sheet (writeRulesLegend_ in TaskService.gs) - keep it
+// in sync with monthOffsets by hand whenever a rule changes, since it's
+// not derived programmatically (natural-language generation from the
+// offsets would be harder to read than a short hand-written sentence).
 var TASK_RULES = [
-  { key: 'preparation', name: '申告準備', monthOffsets: [1] },
-  { key: 'filing_payment', name: '申告・納税', monthOffsets: [-1, -2] },
-  { key: 'tax_forecast', name: '納税予想', monthOffsets: [6] }
+  { key: 'preparation', name: '申告準備', monthOffsets: [1], description: '決算日の1ヶ月前になった月に表示' },
+  { key: 'filing_payment', name: '申告・納税', monthOffsets: [-1, -2], description: '決算日の1ヶ月後・2ヶ月後の月（2ヶ月間）に表示' },
+  { key: 'tax_forecast', name: '納税予想', monthOffsets: [6], description: '決算日の6ヶ月前になった月に表示' }
 ];
 
 var TASK_STATUS_VALUES = ['未着手', '対応中', '完了'];

@@ -22,6 +22,7 @@ function onOpen() {
     .addSeparator()
     .addItem('重複を削除', 'deduplicateTasksFromMenu_')
     .addItem('シートの表示設定を初期化', 'setupSheetFormattingFromMenu_')
+    .addItem('抽出ルールの説明を表示', 'showRulesLegendFromMenu_')
     .addSeparator()
     .addItem('毎月1日の自動更新を有効にする', 'enableMonthlyAutoSync')
     .addItem('毎月1日の自動更新を無効にする', 'disableMonthlyAutoSync')
@@ -83,6 +84,16 @@ function setupSheetFormattingFromMenu_() {
   try {
     setupSheetFormatting_();
     SpreadsheetApp.getActiveSpreadsheet().toast('表示設定を適用しました。', '初期設定', 5);
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('エラーが発生しました: ' + err.message);
+  }
+}
+
+function showRulesLegendFromMenu_() {
+  try {
+    writeRulesLegend_();
+    var sheet = getTasksSpreadsheet_().getSheetByName(RULES_LEGEND_SHEET_NAME);
+    if (sheet) sheet.activate();
   } catch (err) {
     SpreadsheetApp.getUi().alert('エラーが発生しました: ' + err.message);
   }

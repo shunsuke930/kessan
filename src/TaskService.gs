@@ -142,8 +142,13 @@ function getMonthlyMatches_(customers, targetMonthDate) {
   return matches;
 }
 
+// Deliberately compares by year/month only, not monthDate.getTime() - a
+// value read back from a sheet cell can differ by hours from the value
+// that was written (see asSheetDate_ in DateUtils.gs), and this key is
+// what ensureMonthlyTasks_ uses to decide "does this row already exist",
+// so it must stay stable regardless of exact time-of-day.
 function monthKey_(monthDate) {
-  return monthDate.getTime();
+  return monthDate.getFullYear() * 12 + monthDate.getMonth();
 }
 
 function currentMonthStart_() {
@@ -177,10 +182,10 @@ function ensureMonthlyTasks_(matches, targetMonthDate, existingRecords) {
     existingKeys[key] = true;
 
     var row = new Array(TASK_FIELDS.length);
-    row[colIndex.targetMonth] = targetMonthDate;
+    row[colIndex.targetMonth] = asSheetDate_(targetMonthDate);
     row[colIndex.taskName] = m.rule.name;
     row[colIndex.customerName] = m.customer.customerName;
-    row[colIndex.fiscalInstanceDate] = m.fiscalInstanceDate;
+    row[colIndex.fiscalInstanceDate] = asSheetDate_(m.fiscalInstanceDate);
     row[colIndex.staff] = m.customer.staff;
     row[colIndex.progressStatus] = '未着手';
     row[colIndex.notes] = '';
@@ -312,11 +317,11 @@ function columnToLetter_(col) {
 /**
  * Configures the sheet so it reads like a purpose-built tool: a
  * dropdown for ステータス, date-only formatting for 対象月/決算期, row
- * coloring (grey = 完了, light red = 対象月 already past and still not
- * 完了), the internal bookkeeping columns hidden, and a plain column
- * filter on the header row. Safe to re-run any time (e.g. after adding
- * rows beyond the previously-provisioned range) - every step just
- * reapplies the same rule to a fixed row range.
+ * coloring (grey = 完了 only - no overdue/red highlight), the internal
+ * bookkeeping columns hidden, and a plain column filter on the header
+ * row. Safe to re-run any time (e.g. after adding rows beyond the
+ * previously-provisioned range) - every step just reapplies the same
+ * rule to a fixed row range. Also (re)builds the 抽出ルールの説明 sheet.
  */
 function setupSheetFormatting_() {
   var sheet = getTasksSheet_();
@@ -335,21 +340,15 @@ function setupSheetFormatting_() {
   sheet.getRange(2, colIndex.fiscalInstanceDate + 1, dataRowCount, 1).setNumberFormat('yyyy"年"m"月期"');
 
   var fullRowRange = sheet.getRange(2, 1, dataRowCount, TASK_FIELDS.length);
-  var targetMonthLetter = columnToLetter_(colIndex.targetMonth + 1);
   var statusLetter = columnToLetter_(colIndex.progressStatus + 1);
 
   var doneRule = SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied('=$' + statusLetter + '2="完了"')
-    .setBackground('#f5f5f5')
-    .setFontColor('#9aa0a6')
+    .setBackground('#c9c9c9')
+    .setFontColor('#595959')
     .setRanges([fullRowRange])
     .build();
-  var overdueRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=AND($' + targetMonthLetter + '2<EOMONTH(TODAY(),-1)+1,$' + statusLetter + '2<>"完了")')
-    .setBackground('#fdecea')
-    .setRanges([fullRowRange])
-    .build();
-  sheet.setConditionalFormatRules([doneRule, overdueRule]);
+  sheet.setConditionalFormatRules([doneRule]);
 
   ['customerId', 'taskKey', 'updatedAt'].forEach(function (field) {
     if (colIndex[field] !== undefined) sheet.hideColumns(colIndex[field] + 1);
@@ -359,5 +358,38 @@ function setupSheetFormatting_() {
   if (existingFilter) existingFilter.remove();
   sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 2), TASK_FIELDS.length).createFilter();
 
+  sheet.setFrozenRows(1);
+
+  writeRulesLegend_();
+}
+
+var RULES_LEGEND_SHEET_NAME = '抽出ルールの説明';
+
+/**
+ * Writes/refreshes a small reference sheet listing each TASK_RULES entry
+ * and a plain-Japanese description of when it's extracted, so anyone
+ * looking at 案件タスク can find out why a company showed up without
+ * reading the code. Regenerated from TASK_RULES every time this runs, so
+ * it can't go stale after a rule change (as long as `description` is
+ * kept in sync by hand in Constants.gs).
+ */
+function writeRulesLegend_() {
+  var ss = getTasksSpreadsheet_();
+  var sheet = ss.getSheetByName(RULES_LEGEND_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(RULES_LEGEND_SHEET_NAME);
+  sheet.clear();
+  if (sheet.getFilter()) sheet.getFilter().remove();
+
+  var header = ['タスク', '表示される条件'];
+  var rows = TASK_RULES.map(function (rule) { return [rule.name, rule.description || '']; });
+  var values = [header].concat(rows);
+
+  var range = sheet.getRange(1, 1, values.length, 2);
+  range.setValues(values);
+  range.setBorder(true, true, true, true, true, true);
+  sheet.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#f2f3f5');
+  sheet.setColumnWidth(1, 140);
+  sheet.setColumnWidth(2, 420);
+  sheet.getRange(2, 2, rows.length, 1).setWrap(true);
   sheet.setFrozenRows(1);
 }

@@ -57,3 +57,22 @@ function fiscalDateInYear_(month, day, year) {
   }
   return startOfDay_(candidate);
 }
+
+/**
+ * A spreadsheet cell's date value is computed from the SPREADSHEET's own
+ * timezone setting (File > Settings), which can silently differ from the
+ * script's (appsscript.json's "timeZone"). Writing a midnight instant is
+ * then only one timezone-offset hour away from spilling into the
+ * previous calendar day once Sheets re-renders it - e.g. Aug 1 00:00
+ * JST displays as "July 31" in a spreadsheet set to a more western zone.
+ * Using noon instead gives a much wider safety margin for date-only
+ * values that get written to a cell purely for display (a targetMonth or
+ * 決算期), without changing what day/month it represents. Never use this
+ * for a value only ever compared in-script (see monthKey_, which
+ * deliberately avoids depending on time-of-day for this same reason).
+ */
+function asSheetDate_(date) {
+  var d = new Date(date.getTime());
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
