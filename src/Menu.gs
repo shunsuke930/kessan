@@ -92,8 +92,9 @@ function setupSheetFormattingFromMenu_() {
 function showRulesLegendFromMenu_() {
   try {
     writeRulesLegend_();
-    var sheet = getTasksSpreadsheet_().getSheetByName(RULES_LEGEND_SHEET_NAME);
-    if (sheet) sheet.activate();
+    var sheet = getTasksSheet_();
+    sheet.activate();
+    sheet.setActiveRange(sheet.getRange(1, RULES_LEGEND_START_COLUMN, TASK_RULES.length + 1, RULES_LEGEND_HEADERS.length));
   } catch (err) {
     SpreadsheetApp.getUi().alert('エラーが発生しました: ' + err.message);
   }

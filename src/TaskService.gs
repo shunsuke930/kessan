@@ -78,8 +78,30 @@ function buildHeaderIndex_(headerRow) {
   return idx;
 }
 
+// Deliberately reads only the first TASK_FIELDS.length columns, not
+// sheet.getLastColumn() - the 抽出ルールの説明 legend block now lives in
+// this same sheet, off to the right (see RULES_LEGEND_START_COLUMN), and
+// its own header row also says "タスク" in column 1 of ITS block; reading
+// the whole row width risks matching that instead of the real header.
 function getHeaderIndex_(sheet) {
-  return buildHeaderIndex_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
+  return buildHeaderIndex_(sheet.getRange(1, 1, 1, TASK_FIELDS.length).getValues()[0]);
+}
+
+/**
+ * The last row containing actual task data, scanning ONLY the task
+ * columns (1..TASK_FIELDS.length) - never sheet.getLastRow(), which
+ * reflects the whole sheet width and would be thrown off by the 抽出
+ * ルールの説明 legend block sitting in far-right columns of a few
+ * near-the-top rows that otherwise have no task data of their own.
+ */
+function getTaskDataLastRow_(sheet) {
+  var upperBound = sheet.getLastRow();
+  if (upperBound < 1) return 0;
+  var values = sheet.getRange(1, 1, upperBound, TASK_FIELDS.length).getValues();
+  for (var r = values.length - 1; r >= 0; r--) {
+    if (values[r].some(function (c) { return c !== '' && c !== null; })) return r + 1;
+  }
+  return 0;
 }
 
 function taskRowToObject_(row, colIndex) {
@@ -98,10 +120,10 @@ function taskRowToObject_(row, colIndex) {
  */
 function getAllTaskRecords_() {
   var sheet = getTasksSheet_();
-  var range = sheet.getDataRange();
-  var values = range.getValues();
-  if (values.length < 2) return [];
+  var lastRow = getTaskDataLastRow_(sheet);
+  if (lastRow < 2) return [];
 
+  var values = sheet.getRange(1, 1, lastRow, TASK_FIELDS.length).getValues();
   var colIndex = buildHeaderIndex_(values[0]);
   var records = [];
   for (var i = 1; i < values.length; i++) {
@@ -163,26 +185,31 @@ var RULES_LEGEND_HEADERS = [
   '固定月（クライアントに紐づかないタスクのみ。1〜12で指定）'
 ];
 
+// Column the 抽出ルールの説明 block starts at, within 案件タスク itself
+// (not a separate sheet) - a couple of columns to the right of the task
+// data (TASK_FIELDS.length) so it reads as a clearly separate box when
+// scrolling right, matching how it was originally sketched out.
+var RULES_LEGEND_START_COLUMN = TASK_FIELDS.length + 2;
+var RULES_LEGEND_MAX_ROWS = 30; // generous fixed block size; TASK_RULES is short
+
 /**
  * Builds the effective rule set for a sync: starts from TASK_RULES
  * (Constants.gs) for the key/name/description of every known task type,
  * then overrides monthOffsets/fixedMonth with whatever is currently
- * written in the 抽出ルールの説明 sheet's 月/固定月 columns, so staff can
- * tune "何ヶ月前か" without touching code. Falls back to the Constants.gs
- * default whenever a cell is blank/unparseable or the sheet doesn't
- * exist yet (e.g. before the first "シートの表示設定を初期化").
+ * written in the 抽出ルールの説明 block's 月/固定月 columns (in 案件タスク,
+ * see RULES_LEGEND_START_COLUMN), so staff can tune "何ヶ月前か" without
+ * touching code. Falls back to the Constants.gs default whenever a cell
+ * is blank/unparseable or the block hasn't been written yet (e.g. before
+ * the first "シートの表示設定を初期化").
  */
 function loadTaskRules_() {
-  var ss = getTasksSpreadsheet_();
-  var legendSheet = ss.getSheetByName(RULES_LEGEND_SHEET_NAME);
+  var sheet = getTasksSheet_();
   var overridesByName = {};
-  if (legendSheet && legendSheet.getLastRow() > 1) {
-    var values = legendSheet.getRange(2, 1, legendSheet.getLastRow() - 1, 4).getValues();
-    values.forEach(function (row) {
-      if (!row[0]) return;
-      overridesByName[row[0]] = { monthOffsets: parseMonthOffsets_(row[2]), fixedMonth: parseFixedMonth_(row[3]) };
-    });
-  }
+  var values = sheet.getRange(2, RULES_LEGEND_START_COLUMN, RULES_LEGEND_MAX_ROWS, 4).getValues();
+  values.forEach(function (row) {
+    if (!row[0]) return;
+    overridesByName[row[0]] = { monthOffsets: parseMonthOffsets_(row[2]), fixedMonth: parseFixedMonth_(row[3]) };
+  });
 
   return TASK_RULES.map(function (rule) {
     var override = overridesByName[rule.name];
@@ -294,7 +321,7 @@ function ensureMonthlyTasks_(matches, targetMonthDate, existingRecords) {
   });
 
   if (newRows.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, TASK_FIELDS.length).setValues(newRows);
+    sheet.getRange(getTaskDataLastRow_(sheet) + 1, 1, newRows.length, TASK_FIELDS.length).setValues(newRows);
   }
   return newRows.length;
 }
@@ -308,7 +335,7 @@ function ensureMonthlyTasks_(matches, targetMonthDate, existingRecords) {
  */
 function sortByRecency_() {
   var sheet = getTasksSheet_();
-  var lastRow = sheet.getLastRow();
+  var lastRow = getTaskDataLastRow_(sheet);
   if (lastRow < 3) return;
 
   var colIndex = getHeaderIndex_(sheet);
@@ -353,8 +380,9 @@ function syncCurrentMonth() {
  */
 function deduplicateTasks() {
   var sheet = getTasksSheet_();
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return { removed: 0 };
+  var lastRow = getTaskDataLastRow_(sheet);
+  if (lastRow < 2) return { removed: 0 };
+  var values = sheet.getRange(1, 1, lastRow, TASK_FIELDS.length).getValues();
 
   var colIndex = buildHeaderIndex_(values[0]);
   var seen = {};
@@ -382,24 +410,20 @@ function deduplicateTasks() {
 }
 
 /**
- * Clears every stored task row and rewrites the header row, for use
- * after a TASK_FIELDS/TASK_RULES change makes the existing sheet layout
- * stale. Re-applies the display setup afterward. Discards all recorded
+ * Clears every stored task row (columns 1..TASK_FIELDS.length only -
+ * never touches the 抽出ルールの説明 legend block further right, so a
+ * reset never discards a tuned 月/固定月 value) and rewrites the header
+ * row. Re-applies the display setup afterward. Discards all recorded
  * progress/comments - intentionally only reachable via the menu's
  * confirmation dialog (Menu.gs), never automatically.
  */
 function resetAllTasks() {
   var sheet = getTasksSheet_();
-  var lastRow = sheet.getLastRow();
-  var lastCol = Math.max(sheet.getLastColumn(), TASK_FIELDS.length);
+  var lastRow = getTaskDataLastRow_(sheet);
   if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+    sheet.getRange(2, 1, lastRow - 1, TASK_FIELDS.length).clearContent();
   }
   writeTaskHeaderRow_(sheet);
-  var extraCols = lastCol - TASK_FIELDS.length;
-  if (extraCols > 0) {
-    sheet.getRange(1, TASK_FIELDS.length + 1, 1, extraCols).clearContent();
-  }
   setupSheetFormatting_();
 }
 
@@ -455,44 +479,57 @@ function setupSheetFormatting_() {
 
   var existingFilter = sheet.getFilter();
   if (existingFilter) existingFilter.remove();
-  sheet.getRange(1, 1, Math.max(sheet.getLastRow(), 2), TASK_FIELDS.length).createFilter();
+  sheet.getRange(1, 1, Math.max(getTaskDataLastRow_(sheet), 2), TASK_FIELDS.length).createFilter();
 
   sheet.setFrozenRows(1);
 
   writeRulesLegend_();
 }
 
-var RULES_LEGEND_SHEET_NAME = '抽出ルールの説明';
+// Name of an older layout's separate legend tab - writeRulesLegend_
+// migrates any values still sitting there into the new in-sheet block
+// (see below) the first time it runs, then deletes it, so upgrading
+// from that version doesn't lose a tuned 月/固定月 value.
+var LEGACY_RULES_LEGEND_SHEET_NAME = '抽出ルールの説明';
 
 /**
- * Writes/refreshes a small reference sheet listing each TASK_RULES entry,
- * the actual 月/固定月 numbers driving it (editable - see loadTaskRules_,
- * which reads these two columns back on every sync), and a "表示される
- * 条件" description generated from those SAME effective numbers
- * (describeRule_) - so editing 月/固定月 and re-running this (e.g. via
- * "シートの表示設定を初期化") updates the description to match instead of
- * leaving stale wording behind. タスク name is always reset to match
- * Constants.gs; the 月/固定月 columns preserve whatever staff last typed
- * there - this only fills in the Constants.gs default the first time a
- * task type appears (new sheet, or a newly-added rule), so re-running
- * this never clobbers a tuned value.
+ * Writes/refreshes the 抽出ルールの説明 reference block directly in
+ * 案件タスク (columns starting at RULES_LEGEND_START_COLUMN, to the
+ * right of the task data) - not a separate sheet, so it stays visible
+ * right alongside the task list when scrolling right. Lists each
+ * TASK_RULES entry, the actual 月/固定月 numbers driving it (editable -
+ * see loadTaskRules_, which reads these two columns back on every
+ * sync), and a "表示される条件" description generated from those SAME
+ * effective numbers (describeRule_), so editing 月/固定月 and re-running
+ * this (e.g. via "シートの表示設定を初期化") updates the description to
+ * match instead of leaving stale wording behind. タスク name is always
+ * reset to match Constants.gs; the 月/固定月 columns preserve whatever
+ * staff last typed there - this only fills in the Constants.gs default
+ * the first time a task type appears (first run, or a newly-added
+ * rule), so re-running this never clobbers a tuned value.
  */
 function writeRulesLegend_() {
-  var ss = getTasksSpreadsheet_();
-  var sheet = ss.getSheetByName(RULES_LEGEND_SHEET_NAME);
+  var sheet = getTasksSheet_();
+  var startCol = RULES_LEGEND_START_COLUMN;
   var existingOverrides = {};
-  if (sheet) {
-    var lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      sheet.getRange(2, 1, lastRow - 1, 4).getValues().forEach(function (row) {
-        if (row[0]) existingOverrides[row[0]] = { monthOffsets: row[2], fixedMonth: row[3] };
+
+  sheet.getRange(2, startCol, RULES_LEGEND_MAX_ROWS, 4).getValues().forEach(function (row) {
+    if (row[0]) existingOverrides[row[0]] = { monthOffsets: row[2], fixedMonth: row[3] };
+  });
+
+  // One-time migration from the older separate-tab layout, if present.
+  var ss = getTasksSpreadsheet_();
+  var legacySheet = ss.getSheetByName(LEGACY_RULES_LEGEND_SHEET_NAME);
+  if (legacySheet) {
+    if (Object.keys(existingOverrides).length === 0 && legacySheet.getLastRow() > 1) {
+      legacySheet.getRange(2, 1, legacySheet.getLastRow() - 1, 4).getValues().forEach(function (row) {
+        if (row[0] && !existingOverrides[row[0]]) existingOverrides[row[0]] = { monthOffsets: row[2], fixedMonth: row[3] };
       });
     }
-  } else {
-    sheet = ss.insertSheet(RULES_LEGEND_SHEET_NAME);
+    ss.deleteSheet(legacySheet);
   }
-  sheet.clear();
-  if (sheet.getFilter()) sheet.getFilter().remove();
+
+  sheet.getRange(1, startCol, RULES_LEGEND_MAX_ROWS, RULES_LEGEND_HEADERS.length).clearContent().clearFormat();
 
   var rows = TASK_RULES.map(function (rule) {
     var existing = existingOverrides[rule.name];
@@ -508,14 +545,13 @@ function writeRulesLegend_() {
   });
   var values = [RULES_LEGEND_HEADERS].concat(rows);
 
-  var range = sheet.getRange(1, 1, values.length, RULES_LEGEND_HEADERS.length);
+  var range = sheet.getRange(1, startCol, values.length, RULES_LEGEND_HEADERS.length);
   range.setValues(values);
   range.setBorder(true, true, true, true, true, true);
-  sheet.getRange(1, 1, 1, RULES_LEGEND_HEADERS.length).setFontWeight('bold').setBackground('#f2f3f5');
-  sheet.setColumnWidth(1, 140);
-  sheet.setColumnWidth(2, 340);
-  sheet.setColumnWidth(3, 260);
-  sheet.setColumnWidth(4, 200);
-  sheet.getRange(2, 2, rows.length, 1).setWrap(true);
-  sheet.setFrozenRows(1);
+  sheet.getRange(1, startCol, 1, RULES_LEGEND_HEADERS.length).setFontWeight('bold').setBackground('#f2f3f5');
+  sheet.setColumnWidth(startCol, 140);
+  sheet.setColumnWidth(startCol + 1, 340);
+  sheet.setColumnWidth(startCol + 2, 260);
+  sheet.setColumnWidth(startCol + 3, 200);
+  sheet.getRange(2, startCol + 1, rows.length, 1).setWrap(true);
 }

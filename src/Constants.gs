@@ -19,7 +19,7 @@ function getScriptProperty_(key, fallback) {
 // every file was actually pasted into this Apps Script project - if the
 // version shown doesn't match what the setup instructions say it should
 // be, some file was missed.
-var APP_VERSION = '2026-08-09.3';
+var APP_VERSION = '2026-08-09.4';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
