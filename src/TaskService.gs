@@ -120,10 +120,25 @@ function getAllTaskRecords_() {
  * [-1, -2]) matches customers whose fiscal year-end month is 1 or 2
  * months before the target month. `fiscalInstanceDate` is the concrete
  * 決算日 for the matching cycle (shown as-is in the 決算期 column).
+ *
+ * A `fixedMonth` rule (e.g. 年末調整) isn't tied to any customer at all -
+ * it produces exactly one customer-less match when the target month
+ * equals that fixed month, once a year.
+ *
+ * `rules` is the effective rule set for this run (see loadTaskRules_),
+ * not necessarily the raw TASK_RULES constant - the numbers can be
+ * overridden per-deployment via the 抽出ルールの説明 sheet.
  */
-function getMonthlyMatches_(customers, targetMonthDate) {
+function getMonthlyMatches_(customers, targetMonthDate, rules) {
   var matches = [];
-  TASK_RULES.forEach(function (rule) {
+  rules.forEach(function (rule) {
+    if (rule.fixedMonth) {
+      if (targetMonthDate.getMonth() + 1 === rule.fixedMonth) {
+        matches.push({ customer: null, rule: rule, fiscalInstanceDate: null });
+      }
+      return;
+    }
+
     var candidates = rule.monthOffsets.map(function (offset) {
       var d = addMonths_(targetMonthDate, offset);
       return { month: d.getMonth() + 1, year: d.getFullYear() };
@@ -140,6 +155,84 @@ function getMonthlyMatches_(customers, targetMonthDate) {
     });
   });
   return matches;
+}
+
+var RULES_LEGEND_HEADERS = [
+  'タスク', '表示される条件',
+  '月（決算日より前ならプラス、後ろならマイナス。複数はカンマ区切り）',
+  '固定月（クライアントに紐づかないタスクのみ。1〜12で指定）'
+];
+
+/**
+ * Builds the effective rule set for a sync: starts from TASK_RULES
+ * (Constants.gs) for the key/name/description of every known task type,
+ * then overrides monthOffsets/fixedMonth with whatever is currently
+ * written in the 抽出ルールの説明 sheet's 月/固定月 columns, so staff can
+ * tune "何ヶ月前か" without touching code. Falls back to the Constants.gs
+ * default whenever a cell is blank/unparseable or the sheet doesn't
+ * exist yet (e.g. before the first "シートの表示設定を初期化").
+ */
+function loadTaskRules_() {
+  var ss = getTasksSpreadsheet_();
+  var legendSheet = ss.getSheetByName(RULES_LEGEND_SHEET_NAME);
+  var overridesByName = {};
+  if (legendSheet && legendSheet.getLastRow() > 1) {
+    var values = legendSheet.getRange(2, 1, legendSheet.getLastRow() - 1, 4).getValues();
+    values.forEach(function (row) {
+      if (!row[0]) return;
+      overridesByName[row[0]] = { monthOffsets: parseMonthOffsets_(row[2]), fixedMonth: parseFixedMonth_(row[3]) };
+    });
+  }
+
+  return TASK_RULES.map(function (rule) {
+    var override = overridesByName[rule.name];
+    var effective = { key: rule.key, name: rule.name };
+
+    if (override && override.fixedMonth) {
+      effective.fixedMonth = override.fixedMonth;
+    } else if (override && override.monthOffsets) {
+      effective.monthOffsets = override.monthOffsets;
+    } else if (rule.fixedMonth) {
+      effective.fixedMonth = rule.fixedMonth;
+    } else {
+      effective.monthOffsets = rule.monthOffsets;
+    }
+    effective.description = describeRule_(effective.monthOffsets, effective.fixedMonth);
+    return effective;
+  });
+}
+
+/**
+ * Plain-Japanese description of a rule's actual, currently-effective
+ * numbers (not the Constants.gs default) - used both for the legend
+ * sheet's "表示される条件" column and loadTaskRules_'s in-memory rule
+ * objects, so the wording can never say something different from what
+ * the numbers actually do.
+ */
+function describeRule_(monthOffsets, fixedMonth) {
+  if (fixedMonth) {
+    return 'クライアント名はなし。毎年' + fixedMonth + '月に自動で1件だけ表示';
+  }
+  var parts = (monthOffsets || []).map(function (offset) {
+    if (offset > 0) return offset + 'ヶ月前';
+    if (offset < 0) return Math.abs(offset) + 'ヶ月後';
+    return '決算月';
+  });
+  if (!parts.length) return '';
+  return '決算日の' + parts.join('・') + 'になった月に表示';
+}
+
+function parseMonthOffsets_(cellValue) {
+  if (cellValue === '' || cellValue === null || cellValue === undefined) return null;
+  var parts = String(cellValue).split(',')
+    .map(function (s) { return parseInt(s.trim(), 10); })
+    .filter(function (n) { return !isNaN(n); });
+  return parts.length ? parts : null;
+}
+
+function parseFixedMonth_(cellValue) {
+  var n = parseInt(cellValue, 10);
+  return (!isNaN(n) && n >= 1 && n <= 12) ? n : null;
 }
 
 // Deliberately compares by year/month only, not monthDate.getTime() - a
@@ -177,19 +270,24 @@ function ensureMonthlyTasks_(matches, targetMonthDate, existingRecords) {
   var targetKey = monthKey_(targetMonthDate);
 
   matches.forEach(function (m) {
-    var key = m.customer.id + '|' + m.rule.key + '|' + targetKey;
+    // Firm-wide rules (m.customer === null, e.g. 年末調整) aren't tied to
+    // any customer row, so they use a fixed placeholder id instead - at
+    // most one such row can ever exist per rule per target month anyway,
+    // since the rule only matches once a year.
+    var customerId = m.customer ? m.customer.id : 'firm:' + m.rule.key;
+    var key = customerId + '|' + m.rule.key + '|' + targetKey;
     if (existingKeys[key]) return;
     existingKeys[key] = true;
 
     var row = new Array(TASK_FIELDS.length);
     row[colIndex.targetMonth] = asSheetDate_(targetMonthDate);
     row[colIndex.taskName] = m.rule.name;
-    row[colIndex.customerName] = m.customer.customerName;
-    row[colIndex.fiscalInstanceDate] = asSheetDate_(m.fiscalInstanceDate);
-    row[colIndex.staff] = m.customer.staff;
+    row[colIndex.customerName] = m.customer ? m.customer.customerName : '';
+    row[colIndex.fiscalInstanceDate] = m.fiscalInstanceDate ? asSheetDate_(m.fiscalInstanceDate) : '';
+    row[colIndex.staff] = m.customer ? m.customer.staff : '';
     row[colIndex.progressStatus] = '未着手';
     row[colIndex.notes] = '';
-    row[colIndex.customerId] = m.customer.id;
+    row[colIndex.customerId] = customerId;
     row[colIndex.taskKey] = m.rule.key;
     row[colIndex.updatedAt] = now;
     newRows.push(row);
@@ -230,8 +328,9 @@ function syncMonth_(targetMonthDate) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    var rules = loadTaskRules_();
     var customers = getCustomers();
-    var matches = getMonthlyMatches_(customers, targetMonthDate);
+    var matches = getMonthlyMatches_(customers, targetMonthDate, rules);
     var existingRecords = getAllTaskRecords_();
     var createdCount = ensureMonthlyTasks_(matches, targetMonthDate, existingRecords);
     sortByRecency_();
@@ -366,30 +465,57 @@ function setupSheetFormatting_() {
 var RULES_LEGEND_SHEET_NAME = '抽出ルールの説明';
 
 /**
- * Writes/refreshes a small reference sheet listing each TASK_RULES entry
- * and a plain-Japanese description of when it's extracted, so anyone
- * looking at 案件タスク can find out why a company showed up without
- * reading the code. Regenerated from TASK_RULES every time this runs, so
- * it can't go stale after a rule change (as long as `description` is
- * kept in sync by hand in Constants.gs).
+ * Writes/refreshes a small reference sheet listing each TASK_RULES entry,
+ * the actual 月/固定月 numbers driving it (editable - see loadTaskRules_,
+ * which reads these two columns back on every sync), and a "表示される
+ * 条件" description generated from those SAME effective numbers
+ * (describeRule_) - so editing 月/固定月 and re-running this (e.g. via
+ * "シートの表示設定を初期化") updates the description to match instead of
+ * leaving stale wording behind. タスク name is always reset to match
+ * Constants.gs; the 月/固定月 columns preserve whatever staff last typed
+ * there - this only fills in the Constants.gs default the first time a
+ * task type appears (new sheet, or a newly-added rule), so re-running
+ * this never clobbers a tuned value.
  */
 function writeRulesLegend_() {
   var ss = getTasksSpreadsheet_();
   var sheet = ss.getSheetByName(RULES_LEGEND_SHEET_NAME);
-  if (!sheet) sheet = ss.insertSheet(RULES_LEGEND_SHEET_NAME);
+  var existingOverrides = {};
+  if (sheet) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, 4).getValues().forEach(function (row) {
+        if (row[0]) existingOverrides[row[0]] = { monthOffsets: row[2], fixedMonth: row[3] };
+      });
+    }
+  } else {
+    sheet = ss.insertSheet(RULES_LEGEND_SHEET_NAME);
+  }
   sheet.clear();
   if (sheet.getFilter()) sheet.getFilter().remove();
 
-  var header = ['タスク', '表示される条件'];
-  var rows = TASK_RULES.map(function (rule) { return [rule.name, rule.description || '']; });
-  var values = [header].concat(rows);
+  var rows = TASK_RULES.map(function (rule) {
+    var existing = existingOverrides[rule.name];
+    var effectiveFixedMonth = (existing && parseFixedMonth_(existing.fixedMonth)) || rule.fixedMonth || null;
+    var effectiveOffsets = !effectiveFixedMonth
+      ? ((existing && parseMonthOffsets_(existing.monthOffsets)) || rule.monthOffsets || null)
+      : null;
 
-  var range = sheet.getRange(1, 1, values.length, 2);
+    var monthOffsetsCell = effectiveFixedMonth ? '' : (effectiveOffsets ? effectiveOffsets.join(',') : '');
+    var fixedMonthCell = effectiveFixedMonth || '';
+    var description = describeRule_(effectiveOffsets, effectiveFixedMonth);
+    return [rule.name, description, monthOffsetsCell, fixedMonthCell];
+  });
+  var values = [RULES_LEGEND_HEADERS].concat(rows);
+
+  var range = sheet.getRange(1, 1, values.length, RULES_LEGEND_HEADERS.length);
   range.setValues(values);
   range.setBorder(true, true, true, true, true, true);
-  sheet.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#f2f3f5');
+  sheet.getRange(1, 1, 1, RULES_LEGEND_HEADERS.length).setFontWeight('bold').setBackground('#f2f3f5');
   sheet.setColumnWidth(1, 140);
-  sheet.setColumnWidth(2, 420);
+  sheet.setColumnWidth(2, 340);
+  sheet.setColumnWidth(3, 260);
+  sheet.setColumnWidth(4, 200);
   sheet.getRange(2, 2, rows.length, 1).setWrap(true);
   sheet.setFrozenRows(1);
 }

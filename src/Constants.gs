@@ -19,7 +19,7 @@ function getScriptProperty_(key, fallback) {
 // every file was actually pasted into this Apps Script project - if the
 // version shown doesn't match what the setup instructions say it should
 // be, some file was missed.
-var APP_VERSION = '2026-08-09.2';
+var APP_VERSION = '2026-08-09.3';
 
 var CONFIG = {
   // ID of the existing customer-management spreadsheet (read-only access).
@@ -46,27 +46,41 @@ var CUSTOMER_COLUMN_ALIASES = {
 
 // This app generates a fresh task list for one calendar month at a time
 // ("月初にその月にやらないといけないタスクを自動で一覧化する"), rather than
-// tracking a whole fiscal cycle per customer. Each rule extracts customers
-// whose fiscal year-end month sits any of `monthOffsets` calendar months
-// away from the month being viewed:
-//   - offset > 0: the customer's 決算日 is that many months in the
-//     future (upcoming deadline, viewed in advance).
-//   - offset < 0: the customer's 決算日 was that many months ago
-//     (a deadline that falls due this month).
-// 申告準備 = 1 month before 決算日 (prep starts). 申告・納税 = the 2-month
-// window after 決算日 (Japan's statutory corporate filing/payment
-// deadline is exactly 2 months after 決算日, so both the 1-month and
-// 2-month mark stay on the list). 納税予想 = 6 months before 決算日
-// (roughly the fiscal year's halfway point, used to forecast 中間納付).
-// `description` is plain-Japanese wording shown in the auto-generated
-// "抽出ルールの説明" sheet (writeRulesLegend_ in TaskService.gs) - keep it
-// in sync with monthOffsets by hand whenever a rule changes, since it's
-// not derived programmatically (natural-language generation from the
-// offsets would be harder to read than a short hand-written sentence).
+// tracking a whole fiscal cycle per customer. Two kinds of rule:
+//
+// 1. Per-customer rules (`monthOffsets`) extract customers whose fiscal
+//    year-end month sits any of the listed offsets away from the month
+//    being viewed:
+//      - offset > 0: the customer's 決算日 is that many months in the
+//        future (upcoming deadline, viewed in advance).
+//      - offset < 0: the customer's 決算日 was that many months ago
+//        (a deadline that falls due this month).
+//    申告準備 = 1 month before 決算日 (prep starts). 申告・納税 = the
+//    2-month window after 決算日 (Japan's statutory corporate filing/
+//    payment deadline is exactly 2 months after 決算日, so both the
+//    1-month and 2-month mark stay on the list). 納税予想 = 6 months
+//    before 決算日 (roughly the fiscal year's halfway point, used to
+//    forecast 中間納付).
+//
+// 2. Firm-wide rules (`fixedMonth`) aren't tied to any customer's 決算日
+//    at all - they just produce a single row (no クライアント名) whenever
+//    the viewed month equals `fixedMonth`, once a year. 年末調整 is the
+//    only one so far (always October).
+//
+// These defaults are only the STARTING POINT: `月`/`固定月` in the
+// auto-generated "抽出ルールの説明" sheet let staff override the actual
+// numbers without touching code (see loadTaskRules_ in TaskService.gs) -
+// this array is what that sheet gets pre-filled with the first time, and
+// what a blank cell falls back to. There's no separate hand-written
+// description field - the sheet's "表示される条件" column is generated
+// from whatever numbers are actually in effect (describeRule_ in
+// TaskService.gs), so it can never drift out of sync with a number a
+// staff member tuned.
 var TASK_RULES = [
-  { key: 'preparation', name: '申告準備', monthOffsets: [1], description: '決算日の1ヶ月前になった月に表示' },
-  { key: 'filing_payment', name: '申告・納税', monthOffsets: [-1, -2], description: '決算日の1ヶ月後・2ヶ月後の月（2ヶ月間）に表示' },
-  { key: 'tax_forecast', name: '納税予想', monthOffsets: [6], description: '決算日の6ヶ月前になった月に表示' }
+  { key: 'preparation', name: '申告準備', monthOffsets: [1] },
+  { key: 'filing_payment', name: '申告・納税', monthOffsets: [-1, -2] },
+  { key: 'tax_forecast', name: '納税予想', monthOffsets: [6] },
+  { key: 'nenmatsu_chosei', name: '年末調整', fixedMonth: 10 }
 ];
 
 var TASK_STATUS_VALUES = ['未着手', '対応中', '完了'];
