@@ -1,56 +1,146 @@
 import { useEffect, useState } from 'react'
-import { INITIAL_PARAMS, POINTS_PER_TASK, STORAGE_KEY, TASKS } from './constants'
+import {
+  MAX_ACTIVE_PACKAGES,
+  NEGLECT_DAYS_THRESHOLD,
+  PACKAGE_COMPLETE_BONUS,
+  POINTS_PER_TASK,
+  STORAGE_KEY,
+} from './constants'
+import { dateKey, daysBetween, getStreakMultiplier, isPackageCompleteToday } from './gameLogic'
+import { TASKS_BY_ID } from './packages'
 import type { Params, SaveData } from './types'
 
-function getTodayKey(): string {
-  return new Date().toISOString().slice(0, 10)
+const INITIAL_PARAMS: Params = { look: 0, comm: 0, skill: 0, asset: 0 }
+
+function createEmptySave(today: string): SaveData {
+  return {
+    params: { ...INITIAL_PARAMS },
+    activePackages: [],
+    doneToday: [],
+    bonusPackagesToday: [],
+    todayEarned: 0,
+    lastOpenDate: today,
+    streak: 0,
+    history: [],
+  }
 }
 
-function loadInitialState(): SaveData {
-  const today = getTodayKey()
+interface LoadResult {
+  data: SaveData
+  /** 前回起動日から何日空いたか（今日と同日なら0）。読み込み時点でのみ意味を持つ */
+  gapDaysAtLoad: number
+}
+
+function loadInitialState(): LoadResult {
+  const today = dateKey(new Date())
   const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return { date: today, params: { ...INITIAL_PARAMS }, completedTaskIds: [] }
+  if (!raw) return { data: createEmptySave(today), gapDaysAtLoad: 0 }
+
+  let saved: SaveData
+  try {
+    const parsed = JSON.parse(raw) as Partial<SaveData>
+    saved = {
+      params: { ...INITIAL_PARAMS, ...parsed.params },
+      activePackages: parsed.activePackages ?? [],
+      doneToday: parsed.doneToday ?? [],
+      bonusPackagesToday: parsed.bonusPackagesToday ?? [],
+      todayEarned: parsed.todayEarned ?? 0,
+      lastOpenDate: parsed.lastOpenDate ?? today,
+      streak: parsed.streak ?? 0,
+      history: parsed.history ?? [],
+    }
+  } catch {
+    return { data: createEmptySave(today), gapDaysAtLoad: 0 }
   }
 
-  try {
-    const parsed = JSON.parse(raw) as SaveData
-    const params = { ...INITIAL_PARAMS, ...parsed.params }
-    // 日付が変わっていたら今日分のチェック状態だけリセットする
-    if (parsed.date !== today) {
-      return { date: today, params, completedTaskIds: [] }
-    }
-    return { date: today, params, completedTaskIds: parsed.completedTaskIds ?? [] }
-  } catch {
-    return { date: today, params: { ...INITIAL_PARAMS }, completedTaskIds: [] }
+  if (saved.lastOpenDate === today) {
+    return { data: saved, gapDaysAtLoad: 0 }
   }
+
+  // 日付をまたいだ: 前日の記録をhistoryに積み、streakを判定してから今日分をリセットする
+  const gap = daysBetween(saved.lastOpenDate, today)
+  const hadActivityYesterday = saved.doneToday.length > 0
+  const wasConsecutive = gap === 1
+  const nextStreak = wasConsecutive && hadActivityYesterday ? saved.streak + 1 : 0
+
+  const history =
+    saved.todayEarned > 0
+      ? [...saved.history, { date: saved.lastOpenDate, earned: saved.todayEarned }]
+      : saved.history
+
+  const data: SaveData = {
+    ...saved,
+    doneToday: [],
+    bonusPackagesToday: [],
+    todayEarned: 0,
+    lastOpenDate: today,
+    streak: nextStreak,
+    history,
+  }
+
+  return { data, gapDaysAtLoad: gap }
 }
 
 export function useGameState() {
-  const [state, setState] = useState<SaveData>(loadInitialState)
+  const [loadResult] = useState(loadInitialState)
+  const [state, setState] = useState<SaveData>(loadResult.data)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
+  const isNeglected = loadResult.gapDaysAtLoad >= NEGLECT_DAYS_THRESHOLD && state.doneToday.length === 0
+
   const toggleTask = (taskId: string) => {
-    const task = TASKS.find((t) => t.id === taskId)
-    if (!task) return
+    const task = TASKS_BY_ID[taskId]
+    if (!task || !state.activePackages.includes(task.packageId)) return
 
     setState((prev) => {
-      const isDone = prev.completedTaskIds.includes(taskId)
-      const delta = isDone ? -POINTS_PER_TASK : POINTS_PER_TASK
-      const params: Params = {
-        ...prev.params,
-        [task.param]: Math.max(0, prev.params[task.param] + delta),
-      }
-      const completedTaskIds = isDone
-        ? prev.completedTaskIds.filter((id) => id !== taskId)
-        : [...prev.completedTaskIds, taskId]
+      const isDone = prev.doneToday.includes(taskId)
+      const multiplier = getStreakMultiplier(prev.streak)
+      const delta = POINTS_PER_TASK * multiplier
 
-      return { ...prev, params, completedTaskIds }
+      if (isDone) {
+        const params: Params = {
+          ...prev.params,
+          [task.param]: Math.max(0, prev.params[task.param] - delta),
+        }
+        return {
+          ...prev,
+          params,
+          doneToday: prev.doneToday.filter((id) => id !== taskId),
+          todayEarned: Math.max(0, prev.todayEarned - delta),
+        }
+      }
+
+      const streak = prev.streak === 0 ? 1 : prev.streak
+      let params: Params = { ...prev.params, [task.param]: prev.params[task.param] + delta }
+      const doneToday = [...prev.doneToday, taskId]
+      let todayEarned = prev.todayEarned + delta
+      let bonusPackagesToday = prev.bonusPackagesToday
+
+      const justCompletedPackage =
+        !bonusPackagesToday.includes(task.packageId) && isPackageCompleteToday(task.packageId, doneToday)
+      if (justCompletedPackage) {
+        params = { ...params, [task.param]: params[task.param] + PACKAGE_COMPLETE_BONUS }
+        todayEarned += PACKAGE_COMPLETE_BONUS
+        bonusPackagesToday = [...bonusPackagesToday, task.packageId]
+      }
+
+      return { ...prev, params, doneToday, todayEarned, streak, bonusPackagesToday }
     })
   }
 
-  return { params: state.params, completedTaskIds: state.completedTaskIds, toggleTask }
+  const toggleActivePackage = (packageId: string) => {
+    setState((prev) => {
+      const isActive = prev.activePackages.includes(packageId)
+      if (isActive) {
+        return { ...prev, activePackages: prev.activePackages.filter((id) => id !== packageId) }
+      }
+      if (prev.activePackages.length >= MAX_ACTIVE_PACKAGES) return prev
+      return { ...prev, activePackages: [...prev.activePackages, packageId] }
+    })
+  }
+
+  return { state, isNeglected, toggleTask, toggleActivePackage }
 }

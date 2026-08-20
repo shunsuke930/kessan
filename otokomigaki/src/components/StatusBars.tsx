@@ -1,7 +1,7 @@
 import { PARAM_META, PARAM_ORDER } from '../constants'
 import type { Params } from '../types'
 
-const BAR_MAX = 50
+const BAR_MAX = 100
 
 interface StatusBarsProps {
   params: Params
@@ -28,7 +28,7 @@ export function StatusBars({ params }: StatusBarsProps) {
               />
             </div>
             <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-400">
-              {value}
+              {Math.round(value)}
             </span>
           </div>
         )
