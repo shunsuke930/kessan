@@ -29,4 +29,6 @@ export interface SaveData {
   lastOpenDate: string
   streak: number
   history: { date: string; earned: number }[]
+  /** デバッグパネルで累計ポイントを直接上書きしている値。nullなら通常通り計算する */
+  debugPointsOverride: number | null
 }

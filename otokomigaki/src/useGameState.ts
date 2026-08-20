@@ -22,6 +22,7 @@ function createEmptySave(today: string): SaveData {
     lastOpenDate: today,
     streak: 0,
     history: [],
+    debugPointsOverride: null,
   }
 }
 
@@ -48,6 +49,7 @@ function loadInitialState(): LoadResult {
       lastOpenDate: parsed.lastOpenDate ?? today,
       streak: parsed.streak ?? 0,
       history: parsed.history ?? [],
+      debugPointsOverride: parsed.debugPointsOverride ?? null,
     }
   } catch {
     return { data: createEmptySave(today), gapDaysAtLoad: 0 }
@@ -131,6 +133,10 @@ export function useGameState() {
     })
   }
 
+  const setDebugPointsOverride = (value: number | null) => {
+    setState((prev) => ({ ...prev, debugPointsOverride: value }))
+  }
+
   const toggleActivePackage = (packageId: string) => {
     setState((prev) => {
       const isActive = prev.activePackages.includes(packageId)
@@ -142,5 +148,5 @@ export function useGameState() {
     })
   }
 
-  return { state, isNeglected, toggleTask, toggleActivePackage }
+  return { state, isNeglected, toggleTask, toggleActivePackage, setDebugPointsOverride }
 }

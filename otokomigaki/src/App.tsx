@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BottomNav, type View } from './components/BottomNav'
+import { DebugPanel } from './components/DebugPanel'
 import { Header } from './components/Header'
 import { HistoryView } from './components/HistoryView'
 import { type OverlayState, Overlay } from './components/Overlay'
@@ -12,12 +13,13 @@ import { PACKAGES } from './packages'
 import { useGameState } from './useGameState'
 
 function App() {
-  const { state, isNeglected, toggleTask, toggleActivePackage } = useGameState()
+  const { state, isNeglected, toggleTask, toggleActivePackage, setDebugPointsOverride } = useGameState()
   const [view, setView] = useState<View>(state.activePackages.length === 0 ? 'packages' : 'main')
   const [overlay, setOverlay] = useState<OverlayState | null>(null)
 
   const totalLevel = getTotalLevel(state.params)
-  const cumulativePoints = getCumulativePoints(state.history, state.todayEarned)
+  const cumulativePoints =
+    state.debugPointsOverride ?? getCumulativePoints(state.history, state.todayEarned)
   const roomGradeIndex = getRoomGradeIndex(cumulativePoints)
   const roomGrade = getRoomGrade(cumulativePoints)
 
@@ -90,6 +92,15 @@ function App() {
         <BottomNav view={view} onChange={setView} />
 
         <Overlay overlay={overlay} />
+
+        {import.meta.env.DEV && (
+          <DebugPanel
+            effectivePoints={cumulativePoints}
+            isOverridden={state.debugPointsOverride !== null}
+            onSetOverride={setDebugPointsOverride}
+            onClearOverride={() => setDebugPointsOverride(null)}
+          />
+        )}
       </div>
     </div>
   )
