@@ -93,14 +93,12 @@ function App() {
 
         <Overlay overlay={overlay} />
 
-        {import.meta.env.DEV && (
-          <DebugPanel
-            effectivePoints={cumulativePoints}
-            isOverridden={state.debugPointsOverride !== null}
-            onSetOverride={setDebugPointsOverride}
-            onClearOverride={() => setDebugPointsOverride(null)}
-          />
-        )}
+        <DebugPanel
+          effectivePoints={cumulativePoints}
+          isOverridden={state.debugPointsOverride !== null}
+          onSetOverride={setDebugPointsOverride}
+          onClearOverride={() => setDebugPointsOverride(null)}
+        />
       </div>
     </div>
   )

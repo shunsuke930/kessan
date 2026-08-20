@@ -30,13 +30,14 @@ export function DebugPanel({
           setInputValue(String(effectivePoints))
           setOpen((v) => !v)
         }}
-        className="absolute top-2 right-2 z-20 rounded-full bg-black/50 px-2 py-1 text-xs text-white backdrop-blur"
+        aria-label="デバッグパネルを開閉"
+        className="absolute right-3 bottom-3 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-base text-white shadow-lg backdrop-blur"
       >
         🐛
       </button>
 
       {open && (
-        <div className="absolute inset-x-2 top-11 z-20 rounded-xl border border-amber-500/40 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
+        <div className="absolute inset-x-2 bottom-14 z-30 rounded-xl border border-amber-500/40 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold text-amber-400">デバッグパネル</p>
             {isOverridden && (
