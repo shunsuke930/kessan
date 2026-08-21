@@ -46,3 +46,26 @@ body {
 .animate-flash {
   animation: flash 1.2s ease-out forwards;
 }
+
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.animate-toast {
+  animation: toast-in 2.2s ease-out forwards;
+}

@@ -1,4 +1,4 @@
-export type ParamKey = 'look' | 'comm' | 'skill' | 'asset'
+export type ParamKey = 'look' | 'mind' | 'comm' | 'skill'
 
 export type Params = Record<ParamKey, number>
 
@@ -9,6 +9,7 @@ export interface Task {
   param: ParamKey
   icon: string
   why: string
+  pt: number
 }
 
 export interface Package {

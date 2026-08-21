@@ -6,10 +6,17 @@ import { HistoryView } from './components/HistoryView'
 import { type OverlayState, Overlay } from './components/Overlay'
 import { PackageSelect } from './components/PackageSelect'
 import { RoomView } from './components/RoomView'
+import { SettingsView } from './components/SettingsView'
 import { StatusBars } from './components/StatusBars'
 import { TaskList } from './components/TaskList'
-import { getCumulativePoints, getRoomGrade, getRoomGradeIndex, getTotalLevel } from './gameLogic'
-import { PACKAGES } from './packages'
+import {
+  getCumulativePoints,
+  getMaxActivePackages,
+  getRoomGrade,
+  getRoomGradeIndex,
+  getTodaysTasks,
+  getTotalLevel,
+} from './gameLogic'
 import { useGameState } from './useGameState'
 
 function App() {
@@ -22,25 +29,32 @@ function App() {
     state.debugPointsOverride ?? getCumulativePoints(state.history, state.todayEarned)
   const roomGradeIndex = getRoomGradeIndex(cumulativePoints)
   const roomGrade = getRoomGrade(cumulativePoints)
+  const maxActivePackages = getMaxActivePackages(totalLevel)
 
-  const visibleTasks = PACKAGES.filter((pkg) => state.activePackages.includes(pkg.id)).flatMap(
-    (pkg) => pkg.tasks,
-  )
+  const todaysTasks = getTodaysTasks(state.activePackages)
   const allTasksDoneToday =
-    visibleTasks.length > 0 && visibleTasks.every((task) => state.doneToday.includes(task.id))
+    todaysTasks.length > 0 && todaysTasks.every((task) => state.doneToday.includes(task.id))
 
   const prevLevelRef = useRef(totalLevel)
   const prevGradeIndexRef = useRef(roomGradeIndex)
+  const prevMaxActivePackagesRef = useRef(maxActivePackages)
 
   useEffect(() => {
     const prevLevel = prevLevelRef.current
     const prevGradeIndex = prevGradeIndexRef.current
+    const prevMaxActivePackages = prevMaxActivePackagesRef.current
     prevLevelRef.current = totalLevel
     prevGradeIndexRef.current = roomGradeIndex
+    prevMaxActivePackagesRef.current = maxActivePackages
 
     if (roomGradeIndex > prevGradeIndex) {
       setOverlay({ type: 'moved', grade: roomGrade })
       const timer = setTimeout(() => setOverlay(null), 2400)
+      return () => clearTimeout(timer)
+    }
+    if (maxActivePackages > prevMaxActivePackages) {
+      setOverlay({ type: 'slotUnlock', slots: maxActivePackages })
+      const timer = setTimeout(() => setOverlay(null), 2200)
       return () => clearTimeout(timer)
     }
     if (totalLevel > prevLevel) {
@@ -48,7 +62,7 @@ function App() {
       const timer = setTimeout(() => setOverlay(null), 1200)
       return () => clearTimeout(timer)
     }
-  }, [totalLevel, roomGradeIndex, roomGrade])
+  }, [totalLevel, roomGradeIndex, roomGrade, maxActivePackages])
 
   return (
     <div className="flex min-h-screen justify-center bg-black">
@@ -75,6 +89,7 @@ function App() {
         {view === 'packages' && (
           <PackageSelect
             activePackages={state.activePackages}
+            totalLevel={totalLevel}
             onToggle={toggleActivePackage}
             onDone={() => setView('main')}
           />
@@ -88,6 +103,8 @@ function App() {
             params={state.params}
           />
         )}
+
+        {view === 'settings' && <SettingsView />}
 
         <BottomNav view={view} onChange={setView} />
 

@@ -1,4 +1,4 @@
-export type View = 'main' | 'packages' | 'history'
+export type View = 'main' | 'packages' | 'history' | 'settings'
 
 interface BottomNavProps {
   view: View
@@ -9,6 +9,7 @@ const ITEMS: { key: View; label: string; icon: string }[] = [
   { key: 'main', label: 'ホーム', icon: '🏠' },
   { key: 'packages', label: 'パッケージ', icon: '📦' },
   { key: 'history', label: '記録', icon: '📅' },
+  { key: 'settings', label: '設定', icon: '⚙️' },
 ]
 
 export function BottomNav({ view, onChange }: BottomNavProps) {

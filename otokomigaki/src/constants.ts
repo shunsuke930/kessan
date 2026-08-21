@@ -2,19 +2,20 @@ import type { ParamKey } from './types'
 
 export const STORAGE_KEY = 'otokomigaki-save-v2'
 
-export const POINTS_PER_TASK = 1
 export const PACKAGE_COMPLETE_BONUS = 3
-export const MAX_ACTIVE_PACKAGES = 2
 export const NEGLECT_DAYS_THRESHOLD = 3
+export const MAX_DAILY_TASKS = 8
+/** 日付が切り替わる時刻（0〜23時）。この時刻より前は前日として扱う */
+export const DAY_RESET_HOUR = 4
 
 export const PARAM_META: Record<ParamKey, { label: string; emoji: string; bar: string }> = {
   look: { label: '見た目', emoji: '💪', bar: 'bg-pink-400' },
-  comm: { label: 'コミュ力', emoji: '💬', bar: 'bg-sky-400' },
-  skill: { label: 'スキル', emoji: '📚', bar: 'bg-amber-400' },
-  asset: { label: '資産', emoji: '💰', bar: 'bg-emerald-400' },
+  mind: { label: '規律', emoji: '🧠', bar: 'bg-violet-400' },
+  comm: { label: '対人', emoji: '💬', bar: 'bg-sky-400' },
+  skill: { label: '知性', emoji: '📚', bar: 'bg-amber-400' },
 }
 
-export const PARAM_ORDER: ParamKey[] = ['look', 'comm', 'skill', 'asset']
+export const PARAM_ORDER: ParamKey[] = ['look', 'mind', 'comm', 'skill']
 
 export interface RoomGrade {
   level: number
@@ -46,3 +47,15 @@ export const STREAK_TIERS: StreakTier[] = [
 
 export const CHARACTER_STAGES = ['🧍', '🚶', '🧑‍💼', '🕺', '🤴']
 export const NEGLECTED_CHARACTER = '😔'
+
+export interface PackageSlotTier {
+  minLevel: number
+  slots: number
+}
+
+/** 同時に有効化できるパッケージ数。レベルに応じて段階解放する */
+export const PACKAGE_SLOT_TIERS: PackageSlotTier[] = [
+  { minLevel: 0, slots: 2 },
+  { minLevel: 5, slots: 3 },
+  { minLevel: 15, slots: 4 },
+]

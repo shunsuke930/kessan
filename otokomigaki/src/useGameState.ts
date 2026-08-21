@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
+import { NEGLECT_DAYS_THRESHOLD, PACKAGE_COMPLETE_BONUS, STORAGE_KEY } from './constants'
 import {
-  MAX_ACTIVE_PACKAGES,
-  NEGLECT_DAYS_THRESHOLD,
-  PACKAGE_COMPLETE_BONUS,
-  POINTS_PER_TASK,
-  STORAGE_KEY,
-} from './constants'
-import { dateKey, daysBetween, getStreakMultiplier, isPackageCompleteToday } from './gameLogic'
-import { TASKS_BY_ID } from './packages'
+  dateKey,
+  daysBetween,
+  getMaxActivePackages,
+  getStreakMultiplier,
+  getTodaysTasks,
+  getTotalLevel,
+  isPackageCompleteToday,
+} from './gameLogic'
+import { PACKAGES_BY_ID, TASKS_BY_ID } from './packages'
 import type { Params, SaveData } from './types'
 
-const INITIAL_PARAMS: Params = { look: 0, comm: 0, skill: 0, asset: 0 }
+const INITIAL_PARAMS: Params = { look: 0, mind: 0, comm: 0, skill: 0 }
 
 function createEmptySave(today: string): SaveData {
   return {
@@ -23,6 +25,16 @@ function createEmptySave(today: string): SaveData {
     streak: 0,
     history: [],
     debugPointsOverride: null,
+  }
+}
+
+/** 旧スキーマ（look/comm/skill/asset）からの移行。assetはskillへ統合し、mindは0から開始する */
+function migrateParams(raw: Partial<Params> & { asset?: number } | undefined): Params {
+  return {
+    look: raw?.look ?? 0,
+    mind: raw?.mind ?? 0,
+    comm: raw?.comm ?? 0,
+    skill: (raw?.skill ?? 0) + (raw?.asset ?? 0),
   }
 }
 
@@ -41,10 +53,11 @@ function loadInitialState(): LoadResult {
   try {
     const parsed = JSON.parse(raw) as Partial<SaveData>
     saved = {
-      params: { ...INITIAL_PARAMS, ...parsed.params },
-      activePackages: parsed.activePackages ?? [],
-      doneToday: parsed.doneToday ?? [],
-      bonusPackagesToday: parsed.bonusPackagesToday ?? [],
+      params: migrateParams(parsed.params),
+      // 旧パッケージ/タスクIDは現行の定義に存在しないため自然に除外される
+      activePackages: (parsed.activePackages ?? []).filter((id) => id in PACKAGES_BY_ID),
+      doneToday: (parsed.doneToday ?? []).filter((id) => id in TASKS_BY_ID),
+      bonusPackagesToday: (parsed.bonusPackagesToday ?? []).filter((id) => id in PACKAGES_BY_ID),
       todayEarned: parsed.todayEarned ?? 0,
       lastOpenDate: parsed.lastOpenDate ?? today,
       streak: parsed.streak ?? 0,
@@ -100,7 +113,7 @@ export function useGameState() {
     setState((prev) => {
       const isDone = prev.doneToday.includes(taskId)
       const multiplier = getStreakMultiplier(prev.streak)
-      const delta = POINTS_PER_TASK * multiplier
+      const delta = task.pt * multiplier
 
       if (isDone) {
         const params: Params = {
@@ -121,8 +134,10 @@ export function useGameState() {
       let todayEarned = prev.todayEarned + delta
       let bonusPackagesToday = prev.bonusPackagesToday
 
+      const todaysTasks = getTodaysTasks(prev.activePackages)
       const justCompletedPackage =
-        !bonusPackagesToday.includes(task.packageId) && isPackageCompleteToday(task.packageId, doneToday)
+        !bonusPackagesToday.includes(task.packageId) &&
+        isPackageCompleteToday(task.packageId, doneToday, todaysTasks)
       if (justCompletedPackage) {
         params = { ...params, [task.param]: params[task.param] + PACKAGE_COMPLETE_BONUS }
         todayEarned += PACKAGE_COMPLETE_BONUS
@@ -143,7 +158,8 @@ export function useGameState() {
       if (isActive) {
         return { ...prev, activePackages: prev.activePackages.filter((id) => id !== packageId) }
       }
-      if (prev.activePackages.length >= MAX_ACTIVE_PACKAGES) return prev
+      const maxActive = getMaxActivePackages(getTotalLevel(prev.params))
+      if (prev.activePackages.length >= maxActive) return prev
       return { ...prev, activePackages: [...prev.activePackages, packageId] }
     })
   }
