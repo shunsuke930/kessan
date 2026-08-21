@@ -1,3 +1,5 @@
+import type { LucideIcon } from 'lucide-react'
+
 export type ParamKey = 'look' | 'mind' | 'comm' | 'skill'
 
 export type Params = Record<ParamKey, number>
@@ -7,7 +9,7 @@ export interface Task {
   label: string
   packageId: string
   param: ParamKey
-  icon: string
+  icon: LucideIcon
   why: string
   pt: number
 }

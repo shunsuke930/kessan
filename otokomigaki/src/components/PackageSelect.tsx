@@ -92,9 +92,16 @@ export function PackageSelect({ activePackages, totalLevel, onToggle, onDone }: 
                     ✓
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {pkg.tasks.map((t) => t.icon).join(' ')} ／ {pkg.tasks.length}タスク ／ {meta.label}が上がる
-                </p>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    {pkg.tasks.map((t) => (
+                      <t.icon key={t.id} size={13} strokeWidth={1.5} aria-hidden />
+                    ))}
+                  </span>
+                  <span>
+                    ／ {pkg.tasks.length}タスク ／ {meta.label}が上がる
+                  </span>
+                </div>
               </button>
             </li>
           )

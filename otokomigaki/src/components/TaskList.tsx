@@ -78,9 +78,12 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
                             onChange={() => onToggle(task.id)}
                             className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
                           />
-                          <span className="mt-0.5 text-lg" role="img" aria-hidden>
-                            {task.icon}
-                          </span>
+                          <task.icon
+                            size={18}
+                            strokeWidth={1.5}
+                            aria-hidden
+                            className={`mt-0.5 shrink-0 ${done ? 'text-emerald-400' : 'text-slate-300'}`}
+                          />
                           <button
                             type="button"
                             onClick={(e) => {
