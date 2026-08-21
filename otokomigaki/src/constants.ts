@@ -45,8 +45,21 @@ export const STREAK_TIERS: StreakTier[] = [
   { minStreak: 100, multiplier: 2.0 },
 ]
 
-export const CHARACTER_STAGES = ['🧍', '🚶', '🧑‍💼', '🕺', '🤴']
+/** キャラの段階(1〜3)は「見た目(look)」パラメータで決まる。絵文字は画像未配置時のフォールバック */
+export const CHARACTER_STAGES = ['🧍', '🧑‍💼', '🤴']
 export const NEGLECTED_CHARACTER = '😔'
+
+export const LOOK_CHAR_STAGE_THRESHOLDS = [
+  { stage: 1, minLook: 0 },
+  { stage: 2, minLook: 30 },
+  { stage: 3, minLook: 100 },
+]
+
+/** キャラの段階が上がったときに表示するメッセージ */
+export const CHAR_STAGE_UP_MESSAGES: Record<number, string> = {
+  2: '体が変わってきた',
+  3: '見違えるほど仕上がってきた',
+}
 
 export interface PackageSlotTier {
   minLevel: number
@@ -55,7 +68,7 @@ export interface PackageSlotTier {
 
 /** 同時に有効化できるパッケージ数。レベルに応じて段階解放する */
 export const PACKAGE_SLOT_TIERS: PackageSlotTier[] = [
-  { minLevel: 0, slots: 2 },
-  { minLevel: 5, slots: 3 },
-  { minLevel: 15, slots: 4 },
+  { minLevel: 0, slots: 3 },
+  { minLevel: 5, slots: 4 },
+  { minLevel: 15, slots: 5 },
 ]

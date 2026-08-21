@@ -1,6 +1,7 @@
 import {
   CHARACTER_STAGES,
   DAY_RESET_HOUR,
+  LOOK_CHAR_STAGE_THRESHOLDS,
   MAX_DAILY_TASKS,
   NEGLECTED_CHARACTER,
   PACKAGE_SLOT_TIERS,
@@ -40,9 +41,18 @@ export function getRoomGrade(cumulativePoints: number) {
   return ROOM_GRADES[getRoomGradeIndex(cumulativePoints)]
 }
 
-export function getCharacterEmoji(cumulativePoints: number, isNeglected: boolean): string {
+/** 「見た目(look)」パラメータで決まるキャラの段階(1〜3) */
+export function getCharStage(look: number): number {
+  let stage = LOOK_CHAR_STAGE_THRESHOLDS[0].stage
+  for (const tier of LOOK_CHAR_STAGE_THRESHOLDS) {
+    if (look >= tier.minLook) stage = tier.stage
+  }
+  return stage
+}
+
+export function getCharacterEmoji(charStage: number, isNeglected: boolean): string {
   if (isNeglected) return NEGLECTED_CHARACTER
-  return CHARACTER_STAGES[getRoomGradeIndex(cumulativePoints)]
+  return CHARACTER_STAGES[charStage - 1]
 }
 
 export function getCumulativePoints(history: { earned: number }[], todayEarned: number): number {

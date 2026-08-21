@@ -4,6 +4,7 @@ export type OverlayState =
   | { type: 'levelup'; level: number }
   | { type: 'moved'; grade: RoomGrade }
   | { type: 'slotUnlock'; slots: number }
+  | { type: 'charStageUp'; message: string }
 
 interface OverlayProps {
   overlay: OverlayState | null
@@ -28,6 +29,15 @@ export function Overlay({ overlay }: OverlayProps) {
         <p className="text-2xl">📦✨</p>
         <p className="mt-1 text-sm font-bold text-emerald-300">パッケージ枠が解放されました！</p>
         <p className="text-xs text-slate-400">同時に{overlay.slots}つまで有効化できます</p>
+      </div>
+    )
+  }
+
+  if (overlay.type === 'charStageUp') {
+    return (
+      <div className="absolute inset-x-4 top-40 z-50 animate-toast rounded-xl border border-pink-400/50 bg-slate-950/95 px-4 py-3 text-center shadow-xl">
+        <p className="text-2xl">✨💪</p>
+        <p className="mt-1 text-sm font-bold text-pink-300">{overlay.message}</p>
       </div>
     )
   }

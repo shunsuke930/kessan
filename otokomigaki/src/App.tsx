@@ -9,7 +9,9 @@ import { RoomView } from './components/RoomView'
 import { SettingsView } from './components/SettingsView'
 import { StatusBars } from './components/StatusBars'
 import { TaskList } from './components/TaskList'
+import { CHAR_STAGE_UP_MESSAGES } from './constants'
 import {
+  getCharStage,
   getCumulativePoints,
   getMaxActivePackages,
   getRoomGrade,
@@ -17,12 +19,15 @@ import {
   getTodaysTasks,
   getTotalLevel,
 } from './gameLogic'
+import { pickRandomQuote, type Quote } from './quotes'
 import { useGameState } from './useGameState'
 
 function App() {
   const { state, isNeglected, toggleTask, toggleActivePackage, setDebugPointsOverride } = useGameState()
   const [view, setView] = useState<View>(state.activePackages.length === 0 ? 'packages' : 'main')
   const [overlay, setOverlay] = useState<OverlayState | null>(null)
+  const [quote, setQuote] = useState<Quote>(() => pickRandomQuote())
+  const cycleQuote = () => setQuote((prev) => pickRandomQuote(prev))
 
   const totalLevel = getTotalLevel(state.params)
   const cumulativePoints =
@@ -30,6 +35,7 @@ function App() {
   const roomGradeIndex = getRoomGradeIndex(cumulativePoints)
   const roomGrade = getRoomGrade(cumulativePoints)
   const maxActivePackages = getMaxActivePackages(totalLevel)
+  const charStage = getCharStage(state.params.look)
 
   const todaysTasks = getTodaysTasks(state.activePackages)
   const allTasksDoneToday =
@@ -38,18 +44,26 @@ function App() {
   const prevLevelRef = useRef(totalLevel)
   const prevGradeIndexRef = useRef(roomGradeIndex)
   const prevMaxActivePackagesRef = useRef(maxActivePackages)
+  const prevCharStageRef = useRef(charStage)
 
   useEffect(() => {
     const prevLevel = prevLevelRef.current
     const prevGradeIndex = prevGradeIndexRef.current
     const prevMaxActivePackages = prevMaxActivePackagesRef.current
+    const prevCharStage = prevCharStageRef.current
     prevLevelRef.current = totalLevel
     prevGradeIndexRef.current = roomGradeIndex
     prevMaxActivePackagesRef.current = maxActivePackages
+    prevCharStageRef.current = charStage
 
     if (roomGradeIndex > prevGradeIndex) {
       setOverlay({ type: 'moved', grade: roomGrade })
       const timer = setTimeout(() => setOverlay(null), 2400)
+      return () => clearTimeout(timer)
+    }
+    if (charStage > prevCharStage) {
+      setOverlay({ type: 'charStageUp', message: CHAR_STAGE_UP_MESSAGES[charStage] ?? '体が変わってきた' })
+      const timer = setTimeout(() => setOverlay(null), 2200)
       return () => clearTimeout(timer)
     }
     if (maxActivePackages > prevMaxActivePackages) {
@@ -62,7 +76,7 @@ function App() {
       const timer = setTimeout(() => setOverlay(null), 1200)
       return () => clearTimeout(timer)
     }
-  }, [totalLevel, roomGradeIndex, roomGrade, maxActivePackages])
+  }, [totalLevel, roomGradeIndex, roomGrade, maxActivePackages, charStage])
 
   return (
     <div className="flex min-h-screen justify-center bg-black">
@@ -73,8 +87,11 @@ function App() {
           <>
             <RoomView
               cumulativePoints={cumulativePoints}
+              look={state.params.look}
               isNeglected={isNeglected}
               allTasksDoneToday={allTasksDoneToday}
+              quote={quote}
+              onCharacterTap={cycleQuote}
             />
             <StatusBars params={state.params} />
             <TaskList
