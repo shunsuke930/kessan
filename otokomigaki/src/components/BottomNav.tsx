@@ -14,7 +14,10 @@ const ITEMS: { key: View; label: string; icon: string }[] = [
 
 export function BottomNav({ view, onChange }: BottomNavProps) {
   return (
-    <nav className="flex border-t border-slate-800 bg-slate-900">
+    <nav
+      className="flex border-t border-slate-800 bg-slate-900"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}
+    >
       {ITEMS.map((item) => (
         <button
           key={item.key}

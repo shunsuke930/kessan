@@ -81,8 +81,8 @@ function App() {
   }, [totalLevel, roomGradeIndex, roomGrade, maxActivePackages, charStage])
 
   return (
-    <div className="flex h-dvh justify-center bg-black">
-      <div className="relative flex h-full w-full max-w-[375px] flex-col bg-slate-950">
+    <div className="flex min-h-screen justify-center bg-black">
+      <div className="relative flex w-full max-w-[375px] flex-col bg-slate-950">
         <Header totalLevel={totalLevel} roomGradeName={roomGrade.name} streak={state.streak} />
 
         {view === 'main' && (

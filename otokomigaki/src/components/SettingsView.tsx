@@ -48,7 +48,7 @@ export function SettingsView() {
   }
 
   return (
-    <section className="min-h-0 flex-1 overflow-y-auto bg-slate-950 px-4 py-4">
+    <section className="bg-slate-950 px-4 py-4">
       <h2 className="text-sm font-semibold text-slate-200">設定</h2>
 
       <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900 p-4">

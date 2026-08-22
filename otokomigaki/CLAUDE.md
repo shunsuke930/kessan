@@ -63,20 +63,40 @@
 - タッチはブラウザ標準のスクロールに任せ、PC(マウス)向けには
   `onMouseDown`/`onMouseMove` で `scrollLeft` を追従させるドラッグ実装を
   追加している（`scroll-snap-type: mandatory` により、指を離す＝マウスを離す
-  と最寄りのページへ自動スナップする）。
+  と最寄りのページへ自動スナップする）。`touch-action` はあえて指定していない
+  （次項参照）。
 - 上部にパッケージ名・達成数（例: 3/6）・ドットインジケータを表示し、
   `onScroll` で `scrollLeft / clientWidth` を丸めて現在ページを判定する。
-- 全ページが常にDOMに存在する（アンマウントしない）ため、レイアウトの
-  高さバジェットには注意が必要（次項）。
+- 全ページが常にDOMに存在する（アンマウントしない）。
 
-## レイアウトの高さ
+## レイアウトはページ全体スクロール
 
-アプリのルート(`App.tsx`)は `h-dvh`（＋内側カードに `h-full`）で画面ぴったりの
-高さに固定し、スクロールする各セクション（`TaskList`/`PackageSelect`/
-`HistoryView`/`SettingsView`）は `flex-1` に加えて `min-h-0` を必ず付けている。
-`min-h-0` が無いとFlexboxの `min-height: auto` により、内容が長いページ
-（例: 規律パッケージの7タスク）がセクションを押し広げてしまい、
-`overflow-y-auto` が効かずにボトムナビごと画面外に押し出される。
+アプリのルート(`App.tsx`)は `min-h-screen` のみで、`h-dvh`/`h-full`や
+`overflow: hidden`でページの高さを固定していない。部屋・ステータス・
+タスクカルーセルなど全セクションは自然な高さで積み上がり、はみ出した分は
+**ページ全体**（`body`/`html`のデフォルトスクロール）でスクロールする。
+どのセクションも `position: fixed`/`sticky` にしていない。
+
+- `TaskList`/`PackageSelect`/`HistoryView`/`SettingsView` は
+  `flex-1`/`min-h-0`/`overflow-y-auto` を使わず、素直に `<section>` として
+  積み上がるだけにしている（以前はセクション単位で内部スクロールさせようと
+  していたが、`min-h-screen`とFlexboxの`min-height: auto`が絡んで
+  ボトムナビごと画面外に押し出されるバグがあったため撤去した）。
+- 横スクロールのカルーセル(`TaskList.tsx`の`overflow-x-auto`)には
+  `touch-action: pan-y`を**付けていない**。実機/ヘッドレスブラウザで検証した
+  結果、`pan-y`を付けるとタッチでの横スワイプ自体が効かなくなる
+  （`touch-action`はそのプロパティの軸のジェスチャーしか許可しないため）。
+  ページの高さが正しく自然に伸びていれば、`touch-action: auto`（デフォルト）
+  のままでもブラウザが「横方向はカルーセル、縦方向はページ」を自動判別して
+  くれる。縦スクロールがカルーセルに奪われる問題の実体は高さの固定（前段落）
+  であり、touch-actionでは無かった。
+- `DebugPanel.tsx`はページ全体がスクロールするようになったため、
+  `absolute`ではなく`fixed`（ビューポート基準）に変更している。`absolute`の
+  ままだと「カード最下部から◯px」という指定が、タスクが多いときはページの
+  ずっと下（スクロールしないと出てこない位置）になってしまう。
+- `BottomNav.tsx`は最後尾の要素として
+  `padding-bottom: calc(env(safe-area-inset-bottom) + 24px)` を持たせ、
+  iOS Safariの下部バー（ホームインジケータ）に隠れないようにしている。
 
 ## ドット絵素材
 

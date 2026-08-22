@@ -62,7 +62,7 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
 
   if (visiblePackages.length === 0) {
     return (
-      <section className="flex-1 bg-slate-950 px-4 py-6 text-center">
+      <section className="bg-slate-950 px-4 py-6 text-center">
         <p className="mb-3 text-sm text-slate-400">
           パッケージを選ぶとタスクが始まります
         </p>
@@ -81,7 +81,7 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
   const currentDoneCount = currentPackage.tasks.filter((task) => doneToday.includes(task.id)).length
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-950">
+    <section className="flex flex-col bg-slate-950">
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold text-slate-200">{currentPackage.name}</h2>
@@ -114,10 +114,10 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
         onMouseMove={handleMouseMove}
         onMouseUp={endDrag}
         onMouseLeave={endDrag}
-        className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none"
+        className="flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none"
       >
         {visiblePackages.map((pkg) => (
-          <div key={pkg.id} className="w-full shrink-0 snap-start overflow-y-auto px-4 pb-4">
+          <div key={pkg.id} className="w-full shrink-0 snap-start px-4 pb-4">
             <ul className="flex flex-col gap-2">
               {pkg.tasks.map((task) => {
                 const done = doneToday.includes(task.id)
