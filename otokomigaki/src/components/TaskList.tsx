@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { PACKAGES } from '../packages'
 
 interface TaskListProps {
@@ -8,17 +9,13 @@ interface TaskListProps {
   onGoToPackages: () => void
 }
 
-interface DragState {
-  startX: number
-  startScrollLeft: number
-  dragging: boolean
-}
-
 export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }: TaskListProps) {
   const [openWhyIds, setOpenWhyIds] = useState<Set<string>>(new Set())
-  const [pageIndex, setPageIndex] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<DragState | null>(null)
+  // 閉じたパッケージIDだけを持つ。ここに無いパッケージ（新規解放分も含む）は
+  // 常に開いた状態として扱われる（初期状態は全て開く、という要件のため）。
+  const [closedPackageIds, setClosedPackageIds] = useState<Set<string>>(new Set())
+  // チェックした瞬間だけ、その行に0.4秒の枠光り＋0.8秒の+ptふわっと演出を出す
+  const [flashingTaskIds, setFlashingTaskIds] = useState<Set<string>>(new Set())
 
   const visiblePackages = PACKAGES.filter((pkg) => activePackages.includes(pkg.id))
 
@@ -31,43 +28,27 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
     })
   }
 
-  const handleScroll = () => {
-    const el = containerRef.current
-    if (!el || el.clientWidth === 0) return
-    const index = Math.round(el.scrollLeft / el.clientWidth)
-    setPageIndex((prev) => (prev === index ? prev : index))
+  const togglePackageOpen = (packageId: string) => {
+    setClosedPackageIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(packageId)) next.delete(packageId)
+      else next.add(packageId)
+      return next
+    })
   }
 
-  const scrollToIndex = (index: number) => {
-    const el = containerRef.current
-    if (!el) return
-    el.scrollTo({ left: index * el.clientWidth, behavior: 'smooth' })
+  const handleTaskToggle = (taskId: string, alreadyDone: boolean) => {
+    onToggle(taskId)
+    if (alreadyDone) return
+    setFlashingTaskIds((prev) => new Set(prev).add(taskId))
+    setTimeout(() => {
+      setFlashingTaskIds((prev) => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+    }, 800)
   }
-
-  // 横方向のドラッグ/スワイプは自前でscrollLeftを操作する。
-  // コンテナには touch-action: pan-y を指定して縦スクロールをブラウザに
-  // 明け渡しているため、横方向はネイティブのタッチスクロールに頼れない
-  // （pan-yは「縦はブラウザ任せ、横はJSで処理する」という意味の指定）。
-  // そのぶんタッチ用のハンドラをマウスと同じロジックで用意する。
-  const handleDragStart = (x: number) => {
-    const el = containerRef.current
-    if (!el) return
-    dragRef.current = { startX: x, startScrollLeft: el.scrollLeft, dragging: true }
-  }
-  const handleDragMove = (x: number) => {
-    const el = containerRef.current
-    const drag = dragRef.current
-    if (!el || !drag?.dragging) return
-    el.scrollLeft = drag.startScrollLeft - (x - drag.startX)
-  }
-  const endDrag = () => {
-    if (dragRef.current) dragRef.current.dragging = false
-  }
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => handleDragStart(e.pageX)
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => handleDragMove(e.pageX)
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => handleDragStart(e.touches[0].pageX)
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => handleDragMove(e.touches[0].pageX)
 
   if (visiblePackages.length === 0) {
     return (
@@ -86,105 +67,97 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
     )
   }
 
-  const currentPackage = visiblePackages[Math.min(pageIndex, visiblePackages.length - 1)]
-  const currentDoneCount = currentPackage.tasks.filter((task) => doneToday.includes(task.id)).length
-
   return (
-    <section className="flex flex-col bg-slate-950">
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold text-slate-200">{currentPackage.name}</h2>
-          <span className="text-xs text-slate-400">
-            {currentDoneCount}/{currentPackage.tasks.length}
-          </span>
-        </div>
+    <section className="flex flex-col gap-4 bg-slate-950 px-4 py-4">
+      {visiblePackages.map((pkg) => {
+        const doneCount = pkg.tasks.filter((task) => doneToday.includes(task.id)).length
+        const isOpen = !closedPackageIds.has(pkg.id)
 
-        {visiblePackages.length > 1 && (
-          <div className="mt-2 flex justify-center gap-1.5">
-            {visiblePackages.map((pkg, i) => (
-              <button
-                key={pkg.id}
-                type="button"
-                aria-label={`${pkg.name}に切り替える`}
-                onClick={() => scrollToIndex(i)}
-                className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                  i === pageIndex ? 'bg-emerald-400' : 'bg-slate-700'
-                }`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+        return (
+          <div key={pkg.id}>
+            <button
+              type="button"
+              onClick={() => togglePackageOpen(pkg.id)}
+              aria-expanded={isOpen}
+              className="flex w-full items-center justify-between py-1"
+            >
+              <h2 className="text-sm font-semibold text-slate-200">{pkg.name}</h2>
+              <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                {doneCount}/{pkg.tasks.length}
+                <ChevronDown
+                  size={16}
+                  strokeWidth={2}
+                  aria-hidden
+                  className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                />
+              </span>
+            </button>
 
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={endDrag}
-        onMouseLeave={endDrag}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={endDrag}
-        className="flex touch-pan-y snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none"
-      >
-        {visiblePackages.map((pkg) => (
-          <div key={pkg.id} className="w-full shrink-0 snap-start px-4 pb-4">
-            <ul className="flex flex-col gap-2">
-              {pkg.tasks.map((task) => {
-                const done = doneToday.includes(task.id)
-                const whyOpen = openWhyIds.has(task.id)
+            {isOpen && (
+              <ul className="mt-2 flex flex-col gap-2">
+                {pkg.tasks.map((task) => {
+                  const done = doneToday.includes(task.id)
+                  const whyOpen = openWhyIds.has(task.id)
+                  const isFlashing = flashingTaskIds.has(task.id)
 
-                return (
-                  <li key={task.id}>
-                    <div
-                      className={`rounded-xl border px-3 py-2.5 transition-colors ${
-                        done ? 'border-slate-700 bg-slate-800/60' : 'border-slate-800 bg-slate-900'
-                      }`}
-                    >
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={done}
-                          onChange={() => onToggle(task.id)}
-                          className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
-                        />
-                        <task.icon
-                          size={18}
-                          strokeWidth={1.5}
-                          aria-hidden
-                          className={`mt-0.5 shrink-0 ${done ? 'text-emerald-400' : 'text-slate-300'}`}
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            toggleWhy(task.id)
-                          }}
-                          className="flex-1 text-left"
-                        >
-                          <span
-                            className={`block text-sm ${done ? 'text-slate-500 line-through' : 'text-slate-100'}`}
+                  return (
+                    <li key={task.id}>
+                      <div
+                        className={`relative rounded-xl border px-3 py-2.5 transition-colors ${
+                          done ? 'border-slate-700 bg-slate-800/60' : 'border-slate-800 bg-slate-900'
+                        } ${isFlashing ? 'animate-check-glow' : ''}`}
+                      >
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={done}
+                            onChange={() => handleTaskToggle(task.id, done)}
+                            className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-500"
+                          />
+                          <task.icon
+                            size={18}
+                            strokeWidth={1.5}
+                            aria-hidden
+                            className={`mt-0.5 shrink-0 ${done ? 'text-emerald-400' : 'text-slate-300'}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              toggleWhy(task.id)
+                            }}
+                            className="flex-1 text-left"
                           >
-                            {task.label}
+                            <span
+                              className={`block text-sm ${done ? 'text-slate-500 line-through' : 'text-slate-100'}`}
+                            >
+                              {task.label}
+                            </span>
+                          </button>
+                          <span className="relative shrink-0">
+                            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-400">
+                              +{task.pt}pt
+                            </span>
+                            {isFlashing && (
+                              <span className="pt-float animate-float-pt absolute -top-1 right-0 text-[11px] font-semibold text-emerald-400">
+                                +{task.pt}pt
+                              </span>
+                            )}
                           </span>
-                        </button>
-                        <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-400">
-                          +{task.pt}pt
-                        </span>
-                      </label>
+                        </label>
 
-                      {whyOpen && (
-                        <p className="mt-2 ml-8 text-[11px] text-slate-400">💡 {task.why}</p>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+                        {whyOpen && (
+                          <p className="mt-2 ml-8 text-[11px] text-slate-400">💡 {task.why}</p>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
-        ))}
-      </div>
+        )
+      })}
     </section>
   )
 }

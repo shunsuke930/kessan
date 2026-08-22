@@ -90,7 +90,7 @@ function App() {
   return (
     <div className="flex min-h-screen justify-center bg-black">
       <div className="relative flex w-full max-w-[375px] flex-col bg-slate-950">
-        <Header totalLevel={totalLevel} roomGradeName={roomGrade.name} streak={state.streak} />
+        <Header totalLevel={totalLevel} streak={state.streak} />
 
         {view === 'main' && (
           <>

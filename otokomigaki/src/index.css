@@ -135,9 +135,51 @@ body {
   animation: twinkle 4.5s ease-in-out infinite;
 }
 
+@keyframes check-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+  30% {
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+.animate-check-glow {
+  animation: check-glow 0.4s ease-out;
+}
+
+.pt-float {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes float-pt {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+.animate-float-pt {
+  animation: float-pt 0.8s ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-breathe,
-  .animate-check-bounce {
+  .animate-check-bounce,
+  .animate-check-glow,
+  .animate-float-pt {
     animation: none;
   }
 }
