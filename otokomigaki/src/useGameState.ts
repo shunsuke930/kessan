@@ -99,6 +99,8 @@ function loadInitialState(): LoadResult {
 export function useGameState() {
   const [loadResult] = useState(loadInitialState)
   const [state, setState] = useState<SaveData>(loadResult.data)
+  /** タスクをチェックする(完了にする)たびに増える。演出のトリガー用でlocalStorageには保存しない */
+  const [checkPulse, setCheckPulse] = useState(0)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -109,6 +111,10 @@ export function useGameState() {
   const toggleTask = (taskId: string) => {
     const task = TASKS_BY_ID[taskId]
     if (!task || !state.activePackages.includes(task.packageId)) return
+
+    if (!state.doneToday.includes(taskId)) {
+      setCheckPulse((p) => p + 1)
+    }
 
     setState((prev) => {
       const isDone = prev.doneToday.includes(taskId)
@@ -164,5 +170,5 @@ export function useGameState() {
     })
   }
 
-  return { state, isNeglected, toggleTask, toggleActivePackage, setDebugPointsOverride }
+  return { state, isNeglected, checkPulse, toggleTask, toggleActivePackage, setDebugPointsOverride }
 }

@@ -23,7 +23,8 @@ import { pickRandomQuote, type Quote } from './quotes'
 import { useGameState } from './useGameState'
 
 function App() {
-  const { state, isNeglected, toggleTask, toggleActivePackage, setDebugPointsOverride } = useGameState()
+  const { state, isNeglected, checkPulse, toggleTask, toggleActivePackage, setDebugPointsOverride } =
+    useGameState()
   const [view, setView] = useState<View>(state.activePackages.length === 0 ? 'packages' : 'main')
   const [overlay, setOverlay] = useState<OverlayState | null>(null)
   const [quote, setQuote] = useState<Quote>(() => pickRandomQuote())
@@ -90,6 +91,7 @@ function App() {
               look={state.params.look}
               isNeglected={isNeglected}
               allTasksDoneToday={allTasksDoneToday}
+              checkPulse={checkPulse}
               quote={quote}
               onCharacterTap={cycleQuote}
             />

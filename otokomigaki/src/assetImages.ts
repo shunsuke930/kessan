@@ -20,6 +20,12 @@ export function getRoomImageSrc(grade: number): string | null {
   return entry ? entry[1] : null
 }
 
+/** Grade5専用の夜景きらめきレイヤー(room_5_flicker.png)。無ければnull */
+export function getRoomFlickerImageSrc(grade: number): string | null {
+  const entry = Object.entries(roomImages).find(([path]) => path.endsWith(`/room_${grade}_flicker.png`))
+  return entry ? entry[1] : null
+}
+
 export function getCharImageSrc(stage: number): string | null {
   const entry = Object.entries(charImages).find(([path]) => path.endsWith(`/char_${stage}.png`))
   return entry ? entry[1] : null

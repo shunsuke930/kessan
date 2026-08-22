@@ -69,6 +69,22 @@
   （`gameLogic.ts` の `getCharStage`）。段階が上がると `Overlay.tsx` の
   `charStageUp` でメッセージ（`CHAR_STAGE_UP_MESSAGES`）を表示する。
 - 画像には必ず `image-rendering: pixelated` を当てている（ぼやけ防止）。
+- **Grade5専用の夜景きらめき**: `src/assets/rooms/room_5_flicker.png`
+  （768x480、透過PNG）を置くと、room_5.pngの上に不規則な周期（`animate-twinkle`、
+  4.5秒ループ）でopacityが揺らぐレイヤーとして重なる。`pointer-events: none`
+  付きでクリックは妨げない。Grade5以外では表示しない
+  （`getRoomFlickerImageSrc`）。
+
+## キャラの動き
+
+- **呼吸アニメーション**: `.animate-breathe`（`translateY`のみ、3.2秒ループ、
+  `prefers-reduced-motion: reduce`で無効化）を常時適用。
+- **チェック演出**: タスクを1つチェックするたびに`useGameState`の`checkPulse`
+  カウンタが増え、`RoomView.tsx`がそれをkeyにして`.animate-check-bounce`
+  （0.3秒、上に4px）を再生する。全タスク達成時は既存の`.animate-bounce-once`
+  （大きめのお祝い演出）を優先する。呼吸アニメーションと衝突しないよう、
+  呼吸用のラッパーとバウンス用のラッパーを別のdivに分けて`transform`を合成
+  している。
 
 ## 名言（`src/quotes.ts`）
 

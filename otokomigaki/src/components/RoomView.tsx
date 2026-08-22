@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getCharImageSrc, getRoomImageSrc } from '../assetImages'
+import { getCharImageSrc, getRoomFlickerImageSrc, getRoomImageSrc } from '../assetImages'
 import { CHARACTER_STAGES, NEGLECTED_CHARACTER } from '../constants'
 import { getCharStage, getRoomGrade } from '../gameLogic'
 import type { Quote } from '../quotes'
@@ -10,6 +10,8 @@ interface RoomViewProps {
   look: number
   isNeglected: boolean
   allTasksDoneToday: boolean
+  /** タスクをチェックするたびに増える。増えるたびにキャラが小さく跳ねる演出を再生する */
+  checkPulse: number
   quote: Quote
   onCharacterTap: () => void
 }
@@ -50,16 +52,26 @@ export function RoomView({
   look,
   isNeglected,
   allTasksDoneToday,
+  checkPulse,
   quote,
   onCharacterTap,
 }: RoomViewProps) {
   const grade = getRoomGrade(cumulativePoints)
   const charStage = getCharStage(look)
   const roomImageSrc = getRoomImageSrc(grade.level)
+  const flickerImageSrc = grade.level === 5 ? getRoomFlickerImageSrc(grade.level) : null
   const charImageSrc = getCharImageSrc(charStage)
   const charEmojiFallback = CHARACTER_STAGES[charStage - 1]
 
   const roomLayers = useCrossfadeLayers(roomImageSrc, 700)
+
+  // 全達成の演出を優先し、そうでなければチェックのたびに小さく跳ねる
+  const bounceKey = allTasksDoneToday ? 'all-done' : `check-${checkPulse}`
+  const bounceClass = allTasksDoneToday
+    ? 'animate-bounce-once'
+    : checkPulse > 0
+      ? 'animate-check-bounce'
+      : ''
 
   return (
     <section
@@ -78,6 +90,16 @@ export function RoomView({
           style={{ imageRendering: 'pixelated' }}
         />
       ))}
+
+      {flickerImageSrc && !isNeglected && (
+        <img
+          src={flickerImageSrc}
+          alt=""
+          aria-hidden
+          className="animate-twinkle pointer-events-none absolute inset-0 h-full w-full object-cover"
+          style={{ imageRendering: 'pixelated' }}
+        />
+      )}
 
       <QuoteBubble quote={quote} />
 
@@ -101,22 +123,24 @@ export function RoomView({
         type="button"
         onClick={onCharacterTap}
         aria-label="キャラクターをタップして名言を切り替える"
-        className={`relative z-10 flex flex-col items-center border-0 bg-transparent p-0 ${
-          allTasksDoneToday ? 'animate-bounce-once' : ''
-        }`}
+        className="relative z-10 flex flex-col items-center border-0 bg-transparent p-0"
       >
-        {charImageSrc ? (
-          <img
-            src={charImageSrc}
-            alt="キャラクター"
-            className={`h-56 w-32 ${isNeglected ? 'grayscale' : ''}`}
-            style={{ imageRendering: 'pixelated' }}
-          />
-        ) : (
-          <span className="text-8xl drop-shadow-lg" role="img" aria-label="キャラクター">
-            {isNeglected ? NEGLECTED_CHARACTER : charEmojiFallback}
-          </span>
-        )}
+        <div className="animate-breathe">
+          <div key={bounceKey} className={bounceClass}>
+            {charImageSrc ? (
+              <img
+                src={charImageSrc}
+                alt="キャラクター"
+                className={`h-56 w-32 ${isNeglected ? 'grayscale' : ''}`}
+                style={{ imageRendering: 'pixelated' }}
+              />
+            ) : (
+              <span className="block text-8xl drop-shadow-lg" role="img" aria-label="キャラクター">
+                {isNeglected ? NEGLECTED_CHARACTER : charEmojiFallback}
+              </span>
+            )}
+          </div>
+        </div>
         <div className="mt-1 h-3 w-24 rounded-full bg-black/30 blur-sm" />
       </button>
     </section>

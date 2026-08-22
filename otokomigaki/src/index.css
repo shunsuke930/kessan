@@ -82,3 +82,62 @@ body {
 .animate-crossfade {
   animation: crossfade-in 700ms ease-out forwards;
 }
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+
+.animate-breathe {
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes check-bounce {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-check-bounce {
+  animation: check-bounce 0.3s ease-out;
+}
+
+@keyframes twinkle {
+  0% {
+    opacity: 0.25;
+  }
+  18% {
+    opacity: 0.9;
+  }
+  43% {
+    opacity: 0.35;
+  }
+  61% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+.animate-twinkle {
+  animation: twinkle 4.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe,
+  .animate-check-bounce {
+    animation: none;
+  }
+}
