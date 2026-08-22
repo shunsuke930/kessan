@@ -4,7 +4,6 @@ export const STORAGE_KEY = 'otokomigaki-save-v2'
 
 export const PACKAGE_COMPLETE_BONUS = 3
 export const NEGLECT_DAYS_THRESHOLD = 3
-export const MAX_DAILY_TASKS = 8
 /** 日付が切り替わる時刻（0〜23時）。この時刻より前は前日として扱う */
 export const DAY_RESET_HOUR = 4
 
@@ -27,10 +26,10 @@ export interface RoomGrade {
 
 export const ROOM_GRADES: RoomGrade[] = [
   { level: 1, name: 'ワンルーム（散らかっている）', emoji: '🧹', bg: 'from-stone-700 to-stone-900', requiredPt: 0 },
-  { level: 2, name: 'ワンルーム（片付いている）', emoji: '🛏️', bg: 'from-slate-600 to-slate-800', requiredPt: 35 },
-  { level: 3, name: '1LDK', emoji: '🛋️', bg: 'from-blue-700 to-indigo-900', requiredPt: 150 },
-  { level: 4, name: 'デザイナーズ', emoji: '🖼️', bg: 'from-indigo-600 to-purple-900', requiredPt: 450 },
-  { level: 5, name: 'タワマン', emoji: '🏙️', bg: 'from-amber-500 to-purple-900', requiredPt: 900 },
+  { level: 2, name: 'ワンルーム（片付いている）', emoji: '🛏️', bg: 'from-slate-600 to-slate-800', requiredPt: 50 },
+  { level: 3, name: '1LDK', emoji: '🛋️', bg: 'from-blue-700 to-indigo-900', requiredPt: 225 },
+  { level: 4, name: 'デザイナーズ', emoji: '🖼️', bg: 'from-indigo-600 to-purple-900', requiredPt: 675 },
+  { level: 5, name: 'タワマン', emoji: '🏙️', bg: 'from-amber-500 to-purple-900', requiredPt: 1350 },
 ]
 
 export interface StreakTier {

@@ -14,10 +14,11 @@ export function PackageSelect({ activePackages, totalLevel, onToggle, onDone }: 
   const isFull = activePackages.length >= maxActive
 
   return (
-    <section className="flex-1 overflow-y-auto bg-slate-950 px-4 py-4">
+    <section className="min-h-0 flex-1 overflow-y-auto bg-slate-950 px-4 py-4">
       <h2 className="text-sm font-semibold text-slate-200">パッケージを選ぶ</h2>
       <p className="mt-1 text-xs text-slate-500">
-        今は{maxActive}つまで有効にできます（{activePackages.length}/{maxActive}）
+        ONにしたパッケージだけが「今日のタスク」のカルーセルに並びます。今は
+        {maxActive}つまで有効にできます（{activePackages.length}/{maxActive}）
       </p>
 
       <div className="mt-3 flex gap-1.5">

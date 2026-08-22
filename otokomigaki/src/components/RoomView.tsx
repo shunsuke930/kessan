@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getCharImageSrc, getRoomFlickerImageSrc, getRoomImageSrc } from '../assetImages'
+import { loadCharImage, loadRoomFlickerImage, loadRoomImage } from '../assetImages'
 import { CHARACTER_STAGES, NEGLECTED_CHARACTER } from '../constants'
 import { getCharStage, getRoomGrade } from '../gameLogic'
 import type { Quote } from '../quotes'
@@ -47,6 +47,50 @@ function useCrossfadeLayers(src: string | null, durationMs: number): ImageLayer[
   return layers
 }
 
+/** 現グレードの画像だけを都度動的import。前の画像はそのまま残し、読み込めたら差し替える(=クロスフェード用) */
+function useRoomImage(gradeLevel: number): string | null {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    loadRoomImage(gradeLevel).then((result) => {
+      if (!cancelled) setSrc(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [gradeLevel])
+  return src
+}
+
+function useRoomFlickerImage(gradeLevel: number, enabled: boolean): string | null {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    loadRoomFlickerImage(gradeLevel).then((result) => {
+      if (!cancelled) setSrc(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [gradeLevel, enabled])
+  return enabled ? src : null
+}
+
+function useCharImage(stage: number): string | null {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    loadCharImage(stage).then((result) => {
+      if (!cancelled) setSrc(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [stage])
+  return src
+}
+
 export function RoomView({
   cumulativePoints,
   look,
@@ -58,9 +102,9 @@ export function RoomView({
 }: RoomViewProps) {
   const grade = getRoomGrade(cumulativePoints)
   const charStage = getCharStage(look)
-  const roomImageSrc = getRoomImageSrc(grade.level)
-  const flickerImageSrc = grade.level === 5 ? getRoomFlickerImageSrc(grade.level) : null
-  const charImageSrc = getCharImageSrc(charStage)
+  const roomImageSrc = useRoomImage(grade.level)
+  const flickerImageSrc = useRoomFlickerImage(grade.level, grade.level === 5)
+  const charImageSrc = useCharImage(charStage)
   const charEmojiFallback = CHARACTER_STAGES[charStage - 1]
 
   const roomLayers = useCrossfadeLayers(roomImageSrc, 700)
@@ -84,6 +128,8 @@ export function RoomView({
           key={layer.key}
           src={layer.src}
           alt=""
+          width={768}
+          height={480}
           className={`absolute inset-0 h-full w-full object-cover ${
             i === roomLayers.length - 1 ? 'animate-crossfade' : ''
           } ${isNeglected ? 'grayscale' : ''}`}
@@ -96,6 +142,8 @@ export function RoomView({
           src={flickerImageSrc}
           alt=""
           aria-hidden
+          width={768}
+          height={480}
           className="animate-twinkle pointer-events-none absolute inset-0 h-full w-full object-cover"
           style={{ imageRendering: 'pixelated' }}
         />
@@ -131,6 +179,8 @@ export function RoomView({
               <img
                 src={charImageSrc}
                 alt="キャラクター"
+                width={128}
+                height={224}
                 className={`h-56 w-32 ${isNeglected ? 'grayscale' : ''}`}
                 style={{ imageRendering: 'pixelated' }}
               />

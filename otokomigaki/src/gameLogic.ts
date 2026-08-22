@@ -2,11 +2,11 @@ import {
   CHARACTER_STAGES,
   DAY_RESET_HOUR,
   LOOK_CHAR_STAGE_THRESHOLDS,
-  MAX_DAILY_TASKS,
   NEGLECTED_CHARACTER,
   PACKAGE_SLOT_TIERS,
   PARAM_ORDER,
   ROOM_GRADES,
+  type RoomGrade,
   STREAK_TIERS,
 } from './constants'
 import { PACKAGES } from './packages'
@@ -39,6 +39,33 @@ export function getRoomGradeIndex(cumulativePoints: number): number {
 
 export function getRoomGrade(cumulativePoints: number) {
   return ROOM_GRADES[getRoomGradeIndex(cumulativePoints)]
+}
+
+export interface GradeProgress {
+  currentGrade: RoomGrade
+  /** 次のグレード。既に最上位なら null */
+  nextGrade: RoomGrade | null
+  /** 次のグレードまでの残りpt。最上位なら0 */
+  remainingPt: number
+  /** 現グレード開始pt〜次グレード閾値までの進捗(0〜100) */
+  percent: number
+}
+
+export function getGradeProgress(cumulativePoints: number): GradeProgress {
+  const index = getRoomGradeIndex(cumulativePoints)
+  const currentGrade = ROOM_GRADES[index]
+  const nextGrade = ROOM_GRADES[index + 1] ?? null
+
+  if (!nextGrade) {
+    return { currentGrade, nextGrade: null, remainingPt: 0, percent: 100 }
+  }
+
+  const span = nextGrade.requiredPt - currentGrade.requiredPt
+  const progressed = cumulativePoints - currentGrade.requiredPt
+  const percent = Math.min(100, Math.max(0, (progressed / span) * 100))
+  const remainingPt = Math.max(0, nextGrade.requiredPt - cumulativePoints)
+
+  return { currentGrade, nextGrade, remainingPt, percent }
 }
 
 /** 「見た目(look)」パラメータで決まるキャラの段階(1〜3) */
@@ -85,37 +112,9 @@ export function daysBetween(fromKey: string, toKey: string): number {
   return Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-/**
- * 有効なパッケージから均等にタスクを抽出し、最大 MAX_DAILY_TASKS 個の
- * 「今日のタスク」を組み立てる。ラウンドロビンで1個ずつ配るので、
- * パッケージ間のタスク数の差は最大1個に収まる。日付には依存しないため、
- * 同じ有効パッケージの組み合わせなら毎日同じタスクになる。
- */
+/** 有効なパッケージの全タスクを、パッケージ順・タスク定義順に並べて返す。上限はない */
 export function getTodaysTasks(activePackageIds: string[]): Task[] {
-  const activePackages = PACKAGES.filter((pkg) => activePackageIds.includes(pkg.id))
-  if (activePackages.length === 0) return []
-
-  const allocation: Record<string, number> = {}
-  activePackages.forEach((pkg) => {
-    allocation[pkg.id] = 0
-  })
-
-  let selected = 0
-  let round = 0
-  const maxRounds = Math.max(...activePackages.map((pkg) => pkg.tasks.length))
-
-  while (selected < MAX_DAILY_TASKS && round < maxRounds) {
-    for (const pkg of activePackages) {
-      if (selected >= MAX_DAILY_TASKS) break
-      if (allocation[pkg.id] === round && allocation[pkg.id] < pkg.tasks.length) {
-        allocation[pkg.id]++
-        selected++
-      }
-    }
-    round++
-  }
-
-  return activePackages.flatMap((pkg) => pkg.tasks.slice(0, allocation[pkg.id]))
+  return PACKAGES.filter((pkg) => activePackageIds.includes(pkg.id)).flatMap((pkg) => pkg.tasks)
 }
 
 /** レベルに応じて解放されている、同時有効化できるパッケージ数の上限 */

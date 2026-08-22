@@ -34,33 +34,66 @@
 
 ## 主要な仕組み
 
-- **1日の表示タスクは最大8個**（`MAX_DAILY_TASKS`、`gameLogic.ts` の
-  `getTodaysTasks`）。有効化されたパッケージからラウンドロビンで1個ずつ均等に
-  抽出する。日付には依存しないため、有効パッケージの組み合わせが同じなら毎日
-  同じ8個になる。
+- **1日のタスク数に上限はない**（`gameLogic.ts` の `getTodaysTasks`）。有効な
+  パッケージの全タスクをそのまま返すだけで、やった分だけptが貯まる。
 - **同時に有効化できるパッケージ数はレベルで段階解放**（`constants.ts` の
   `PACKAGE_SLOT_TIERS`）。Lv0〜4:3枠 / Lv5〜14:4枠 / Lv15〜:5枠（全パッケージ）。
   未解放の枠はパッケージ選択画面でグレー表示（`PackageSelect.tsx`）し、解放時は
-  `Overlay.tsx` の `slotUnlock` で通知する。
+  `Overlay.tsx` の `slotUnlock` で通知する。パッケージ選択画面はカルーセルに
+  出す／出さないのON/OFFスイッチとして機能する。
 - **日付の切り替えは午前4時基準**（`constants.ts` の `DAY_RESET_HOUR`、
   `gameLogic.ts` の `dateKey`）。深夜0〜4時は前日として扱う。streakの連続判定も
   同じ境目を使う。
-- **部屋グレード**（`ROOM_GRADES`）は「累計ポイント」（history合計＋今日の
-  獲得pt）で判定し、下がることはない。
+- **部屋グレードの必要pt**（`ROOM_GRADES`）: Grade1=0 / Grade2=50 / Grade3=225 /
+  Grade4=675 / Grade5=1350。「累計ポイント」（history合計＋今日の獲得pt）で
+  判定し、下がることはない。次のグレードまでの残りptと進捗バーは
+  `gameLogic.ts` の `getGradeProgress` が計算し、`GradeProgress.tsx` が
+  ホーム画面の部屋下に常時表示する（Grade5到達時は「最上階に到達」）。
 - **ストリーク倍率**（`STREAK_TIERS`）: 連続日数に応じてタスク獲得ptが
   ×1.0〜×2.0になる。
 - **データのバックアップ**: 設定画面（`SettingsView.tsx`）からJSONの書き出し・
   読み込みができる。iOS SafariでのlocalStorage消失に備えた保険。
+
+## 今日のタスク（カルーセル、`TaskList.tsx`）
+
+パッケージごとに1画面のページを横並びにした、CSS scroll-snap
+（`overflow-x-auto` + `snap-x snap-mandatory` + 各ページ `snap-start`）による
+カルーセル。外部ライブラリは使っていない。
+
+- タッチはブラウザ標準のスクロールに任せ、PC(マウス)向けには
+  `onMouseDown`/`onMouseMove` で `scrollLeft` を追従させるドラッグ実装を
+  追加している（`scroll-snap-type: mandatory` により、指を離す＝マウスを離す
+  と最寄りのページへ自動スナップする）。
+- 上部にパッケージ名・達成数（例: 3/6）・ドットインジケータを表示し、
+  `onScroll` で `scrollLeft / clientWidth` を丸めて現在ページを判定する。
+- 全ページが常にDOMに存在する（アンマウントしない）ため、レイアウトの
+  高さバジェットには注意が必要（次項）。
+
+## レイアウトの高さ
+
+アプリのルート(`App.tsx`)は `h-dvh`（＋内側カードに `h-full`）で画面ぴったりの
+高さに固定し、スクロールする各セクション（`TaskList`/`PackageSelect`/
+`HistoryView`/`SettingsView`）は `flex-1` に加えて `min-h-0` を必ず付けている。
+`min-h-0` が無いとFlexboxの `min-height: auto` により、内容が長いページ
+（例: 規律パッケージの7タスク）がセクションを押し広げてしまい、
+`overflow-y-auto` が効かずにボトムナビごと画面外に押し出される。
 
 ## ドット絵素材
 
 `src/assets/rooms/room_1.png`〜`room_5.png`（768x480、部屋グレード1〜5に対応）と
 `src/assets/chars/char_1.png`〜`char_3.png`（128x224、透過PNG、キャラの段階
 1〜3に対応）を配置すると自動で使われる。`src/assetImages.ts` が
-`import.meta.glob` でこれらを解決していて、ファイルが無い場合は
-`getRoomImageSrc`/`getCharImageSrc` が `null` を返し、絵文字ベースの表示
-（`RoomView.tsx`のグラデーション背景＋`CHARACTER_STAGES`の絵文字）に自動で
-フォールバックする。画像未配置でもビルドは落ちない。
+`import.meta.glob`（**遅延**import。`eager: true` は使わない）でこれらを解決
+していて、ファイルが無い場合は `loadRoomImage`/`loadCharImage` が
+`Promise<null>` を返し、絵文字ベースの表示（`RoomView.tsx`のグラデーション
+背景＋`CHARACTER_STAGES`の絵文字）に自動でフォールバックする。画像未配置でも
+ビルドは落ちない。
+
+現在表示中のグレード/段階の画像だけを動的import（=そのファイルだけを
+ネットワーク取得）し、他の画像は実際に必要になるまで読み込まない
+（`RoomView.tsx` の `useRoomImage`/`useCharImage`/`useRoomFlickerImage`）。
+読み込みが終わるまでは前の画像（または絵文字フォールバック）をそのまま表示し
+続けるため、グレード変更時のクロスフェードも自然につながる。
 
 - 部屋グレードの画像切り替えは `RoomView.tsx` 内の `useCrossfadeLayers` で
   クロスフェードする。
@@ -96,3 +129,15 @@
 
 `DebugPanel.tsx`。画面右下の🐛ボタンから常時開閉できる（本番ビルドでも表示）。
 累計ポイントの直接入力・部屋グレード1〜5への即切り替えができる。
+
+## パフォーマンス / PWA
+
+- 画像には `width`/`height` を明示してレイアウトシフトを防いでいる。
+- `vite-plugin-pwa`（`vite.config.ts`）でオフライン起動・2回目以降の高速化を
+  実現。`registerType: 'autoUpdate'` でService Workerの登録・manifestへの
+  リンクはビルド時に自動注入される（`index.html`を手動編集する必要はない）。
+  `display: 'standalone'` によりホーム画面に追加するとブラウザバーなしで
+  起動する。アイコン（`public/pwa-*.png`）は仮素材なので、実際のブランド
+  アイコンに差し替えるとよい。
+- ドット絵PNGは `optipng -o7` でロス無し圧縮済み（画質・透過は変化しない）。
+  素材を差し替えたら同様に圧縮しておくと軽量に保てる。

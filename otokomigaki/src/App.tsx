@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BottomNav, type View } from './components/BottomNav'
 import { DebugPanel } from './components/DebugPanel'
+import { GradeProgress } from './components/GradeProgress'
 import { Header } from './components/Header'
 import { HistoryView } from './components/HistoryView'
 import { type OverlayState, Overlay } from './components/Overlay'
@@ -80,8 +81,8 @@ function App() {
   }, [totalLevel, roomGradeIndex, roomGrade, maxActivePackages, charStage])
 
   return (
-    <div className="flex min-h-screen justify-center bg-black">
-      <div className="relative flex w-full max-w-[375px] flex-col bg-slate-950">
+    <div className="flex h-dvh justify-center bg-black">
+      <div className="relative flex h-full w-full max-w-[375px] flex-col bg-slate-950">
         <Header totalLevel={totalLevel} roomGradeName={roomGrade.name} streak={state.streak} />
 
         {view === 'main' && (
@@ -95,6 +96,7 @@ function App() {
               quote={quote}
               onCharacterTap={cycleQuote}
             />
+            <GradeProgress cumulativePoints={cumulativePoints} />
             <StatusBars params={state.params} />
             <TaskList
               activePackages={state.activePackages}
