@@ -32,8 +32,29 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // ドット絵やJS/CSSなどビルド成果物を丸ごとプリキャッシュし、オフライン起動を可能にする
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        // JS/CSS/HTMLはプリキャッシュしない。開発が活発な間はデプロイのたびに
+        // ハッシュが変わるため、丸ごとプリキャッシュすると古いservice workerが
+        // 古いapp shellを配り続け「直したのに反映されない」原因になる。
+        // 画像だけは変更頻度が低く重いので、静的にプリキャッシュしてオフライン
+        // 表示に使う。
+        globPatterns: ['**/*.{png,svg,webp,ico}'],
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          {
+            // ナビゲーション(index.html)・JS・CSSは毎回まずネットワークを試し、
+            // オフラインの時だけ直近のキャッシュにフォールバックする
+            urlPattern: ({ request }) =>
+              request.destination === 'document' ||
+              request.destination === 'script' ||
+              request.destination === 'style',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'app-shell',
+              networkTimeoutSeconds: 3,
+            },
+          },
+        ],
       },
     }),
   ],

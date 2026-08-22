@@ -66,7 +66,7 @@ export function DebugPanel({
           </label>
 
           <p className="mb-1 text-[11px] text-slate-500">部屋グレードに即切り替え</p>
-          <div className="mb-2 grid grid-cols-5 gap-1.5">
+          <div className="mb-2 grid grid-cols-6 gap-1.5">
             {ROOM_GRADES.map((grade) => (
               <button
                 key={grade.level}

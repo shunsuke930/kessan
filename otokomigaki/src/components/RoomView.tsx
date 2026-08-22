@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadCharImage, loadRoomFlickerImage, loadRoomImage } from '../assetImages'
+import { getCharImageSrc, getRoomFlickerImageSrc, getRoomImageSrc, getRoomWaveImages } from '../assetImages'
 import { CHARACTER_STAGES, NEGLECTED_CHARACTER } from '../constants'
 import { getCharStage, getRoomGrade } from '../gameLogic'
 import type { Quote } from '../quotes'
@@ -21,7 +21,7 @@ interface ImageLayer {
   key: number
 }
 
-/** 部屋グレードの画像が切り替わるとき、直前の画像を残しつつ新しい画像をフェードインしてクロスフェードにする */
+/** srcが切り替わるとき、直前の画像を残しつつ新しい画像をフェードインしてクロスフェードにする */
 function useCrossfadeLayers(src: string | null, durationMs: number): ImageLayer[] {
   const [layers, setLayers] = useState<ImageLayer[]>(src ? [{ src, key: 0 }] : [])
   const keyRef = useRef(0)
@@ -47,48 +47,31 @@ function useCrossfadeLayers(src: string | null, durationMs: number): ImageLayer[
   return layers
 }
 
-/** 現グレードの画像だけを都度動的import。前の画像はそのまま残し、読み込めたら差し替える(=クロスフェード用) */
-function useRoomImage(gradeLevel: number): string | null {
-  const [src, setSrc] = useState<string | null>(null)
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
   useEffect(() => {
-    let cancelled = false
-    loadRoomImage(gradeLevel).then((result) => {
-      if (!cancelled) setSrc(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [gradeLevel])
-  return src
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const handler = () => setReduced(mq.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return reduced
 }
 
-function useRoomFlickerImage(gradeLevel: number, enabled: boolean): string | null {
-  const [src, setSrc] = useState<string | null>(null)
-  useEffect(() => {
-    if (!enabled) return
-    let cancelled = false
-    loadRoomFlickerImage(gradeLevel).then((result) => {
-      if (!cancelled) setSrc(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [gradeLevel, enabled])
-  return enabled ? src : null
-}
+/** 波アニメーションのフレームを一定間隔で巡回する。reduced-motion時は先頭フレーム固定 */
+function useWaveFrame(frames: string[] | null, intervalMs: number): string | null {
+  const [index, setIndex] = useState(0)
+  const reducedMotion = usePrefersReducedMotion()
 
-function useCharImage(stage: number): string | null {
-  const [src, setSrc] = useState<string | null>(null)
   useEffect(() => {
-    let cancelled = false
-    loadCharImage(stage).then((result) => {
-      if (!cancelled) setSrc(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [stage])
-  return src
+    if (!frames || frames.length <= 1 || reducedMotion) return
+    const timer = setInterval(() => setIndex((i) => (i + 1) % frames.length), intervalMs)
+    return () => clearInterval(timer)
+  }, [frames, intervalMs, reducedMotion])
+
+  return frames ? frames[index % frames.length] : null
 }
 
 export function RoomView({
@@ -102,12 +85,15 @@ export function RoomView({
 }: RoomViewProps) {
   const grade = getRoomGrade(cumulativePoints)
   const charStage = getCharStage(look)
-  const roomImageSrc = useRoomImage(grade.level)
-  const flickerImageSrc = useRoomFlickerImage(grade.level, grade.level === 5)
-  const charImageSrc = useCharImage(charStage)
+  const roomImageSrc = getRoomImageSrc(grade.level)
+  const flickerImageSrc = getRoomFlickerImageSrc(grade.level)
+  const waveFrames = getRoomWaveImages(grade.level)
+  const charImageSrc = getCharImageSrc(charStage)
   const charEmojiFallback = CHARACTER_STAGES[charStage - 1]
 
   const roomLayers = useCrossfadeLayers(roomImageSrc, 700)
+  const currentWaveFrame = useWaveFrame(waveFrames, 900)
+  const waveLayers = useCrossfadeLayers(currentWaveFrame, 500)
 
   // 全達成の演出を優先し、そうでなければチェックのたびに小さく跳ねる
   const bounceKey = allTasksDoneToday ? 'all-done' : `check-${checkPulse}`
@@ -136,6 +122,22 @@ export function RoomView({
           style={{ imageRendering: 'pixelated' }}
         />
       ))}
+
+      {!isNeglected &&
+        waveLayers.map((layer, i) => (
+          <img
+            key={layer.key}
+            src={layer.src}
+            alt=""
+            aria-hidden
+            width={768}
+            height={480}
+            className={`pointer-events-none absolute inset-0 h-full w-full object-cover ${
+              i === waveLayers.length - 1 ? 'animate-crossfade' : ''
+            }`}
+            style={{ imageRendering: 'pixelated' }}
+          />
+        ))}
 
       {flickerImageSrc && !isNeglected && (
         <img

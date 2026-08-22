@@ -24,8 +24,15 @@ import { pickRandomQuote, type Quote } from './quotes'
 import { useGameState } from './useGameState'
 
 function App() {
-  const { state, isNeglected, checkPulse, toggleTask, toggleActivePackage, setDebugPointsOverride } =
-    useGameState()
+  const {
+    state,
+    isNeglected,
+    checkPulse,
+    debugPointsOverride,
+    toggleTask,
+    toggleActivePackage,
+    setDebugPointsOverride,
+  } = useGameState()
   const [view, setView] = useState<View>(state.activePackages.length === 0 ? 'packages' : 'main')
   const [overlay, setOverlay] = useState<OverlayState | null>(null)
   const [quote, setQuote] = useState<Quote>(() => pickRandomQuote())
@@ -33,7 +40,7 @@ function App() {
 
   const totalLevel = getTotalLevel(state.params)
   const cumulativePoints =
-    state.debugPointsOverride ?? getCumulativePoints(state.history, state.todayEarned)
+    debugPointsOverride ?? getCumulativePoints(state.history, state.todayEarned)
   const roomGradeIndex = getRoomGradeIndex(cumulativePoints)
   const roomGrade = getRoomGrade(cumulativePoints)
   const maxActivePackages = getMaxActivePackages(totalLevel)
@@ -133,7 +140,7 @@ function App() {
 
         <DebugPanel
           effectivePoints={cumulativePoints}
-          isOverridden={state.debugPointsOverride !== null}
+          isOverridden={debugPointsOverride !== null}
           onSetOverride={setDebugPointsOverride}
           onClearOverride={() => setDebugPointsOverride(null)}
         />

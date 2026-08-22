@@ -1,39 +1,56 @@
 /**
- * ドット絵素材(src/assets/rooms, src/assets/chars)への遅延URL解決。
- * eager指定なし(=遅延)のimport.meta.globなので、実際に必要になった画像だけを
- * 動的import・取得する。マッチするファイルが無くても空オブジェクトを返す
- * だけでビルドは落ちないため、画像がまだ配置されていない状態でも安全に使える。
+ * ドット絵素材は public/assets/ 配下にルート絶対パスで置く方式に統一している
+ * （src/配下でimportする方式は、ビルド後のハッシュ付きファイル名やコード分割の
+ * 経路がホスティング側の設定と噛み合わず、本番で読み込めなくなる問題があった）。
+ * パスは文字列を組み立てず、すべて明示的なマップとして持つ。
+ * ここに無いグレード/段階は単に「画像なし」として扱われ、呼び出し側は
+ * 絵文字などのフォールバック表示に切り替える。ファイルが実在しない場合も
+ * ビルドは落ちない（public/はビルド時に存在チェックされないため）。
  */
-const roomImageLoaders = import.meta.glob('./assets/rooms/room_*.png', {
-  import: 'default',
-  query: '?url',
-}) as Record<string, () => Promise<string>>
 
-const charImageLoaders = import.meta.glob('./assets/chars/char_*.png', {
-  import: 'default',
-  query: '?url',
-}) as Record<string, () => Promise<string>>
-
-function findLoader(
-  loaders: Record<string, () => Promise<string>>,
-  suffix: string,
-): (() => Promise<string>) | null {
-  const entry = Object.entries(loaders).find(([path]) => path.endsWith(suffix))
-  return entry ? entry[1] : null
+export const ROOM_IMAGES: Record<number, string> = {
+  1: '/assets/rooms/room_1.png',
+  2: '/assets/rooms/room_2.png',
+  3: '/assets/rooms/room_3.png',
+  4: '/assets/rooms/room_4.png',
+  5: '/assets/rooms/room_5.png',
+  6: '/assets/rooms/room_6.png',
 }
 
-export function loadRoomImage(grade: number): Promise<string | null> {
-  const loader = findLoader(roomImageLoaders, `/room_${grade}.png`)
-  return loader ? loader() : Promise.resolve(null)
+/** Grade5(海の見える家)専用の波アニメーション用フレーム */
+export const ROOM_WAVE_IMAGES: Record<number, string[]> = {
+  5: [
+    '/assets/rooms/room_5_wave_1.png',
+    '/assets/rooms/room_5_wave_2.png',
+    '/assets/rooms/room_5_wave_3.png',
+  ],
 }
 
-/** Grade5専用の夜景きらめきレイヤー(room_5_flicker.png)。無ければnull */
-export function loadRoomFlickerImage(grade: number): Promise<string | null> {
-  const loader = findLoader(roomImageLoaders, `/room_${grade}_flicker.png`)
-  return loader ? loader() : Promise.resolve(null)
+/** Grade6(タワーマンション)専用の夜景きらめきレイヤー */
+export const ROOM_FLICKER_IMAGES: Record<number, string> = {
+  6: '/assets/rooms/room_6_flicker.png',
 }
 
-export function loadCharImage(stage: number): Promise<string | null> {
-  const loader = findLoader(charImageLoaders, `/char_${stage}.png`)
-  return loader ? loader() : Promise.resolve(null)
+export const CHAR_IMAGES: Record<number, string> = {
+  1: '/assets/chars/char_1.png',
+  2: '/assets/chars/char_2.png',
+  3: '/assets/chars/char_3.png',
+  4: '/assets/chars/char_4.png',
+  5: '/assets/chars/char_5.png',
+}
+
+export function getRoomImageSrc(grade: number): string | null {
+  return ROOM_IMAGES[grade] ?? null
+}
+
+export function getRoomWaveImages(grade: number): string[] | null {
+  return ROOM_WAVE_IMAGES[grade] ?? null
+}
+
+export function getRoomFlickerImageSrc(grade: number): string | null {
+  return ROOM_FLICKER_IMAGES[grade] ?? null
+}
+
+export function getCharImageSrc(stage: number): string | null {
+  return CHAR_IMAGES[stage] ?? null
 }

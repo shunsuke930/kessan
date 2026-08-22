@@ -44,21 +44,30 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
     el.scrollTo({ left: index * el.clientWidth, behavior: 'smooth' })
   }
 
-  // タッチはブラウザ標準のスクロールに任せ、PC(マウス)向けにドラッグでのスワイプだけ追加する
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  // 横方向のドラッグ/スワイプは自前でscrollLeftを操作する。
+  // コンテナには touch-action: pan-y を指定して縦スクロールをブラウザに
+  // 明け渡しているため、横方向はネイティブのタッチスクロールに頼れない
+  // （pan-yは「縦はブラウザ任せ、横はJSで処理する」という意味の指定）。
+  // そのぶんタッチ用のハンドラをマウスと同じロジックで用意する。
+  const handleDragStart = (x: number) => {
     const el = containerRef.current
     if (!el) return
-    dragRef.current = { startX: e.pageX, startScrollLeft: el.scrollLeft, dragging: true }
+    dragRef.current = { startX: x, startScrollLeft: el.scrollLeft, dragging: true }
   }
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleDragMove = (x: number) => {
     const el = containerRef.current
     const drag = dragRef.current
     if (!el || !drag?.dragging) return
-    el.scrollLeft = drag.startScrollLeft - (e.pageX - drag.startX)
+    el.scrollLeft = drag.startScrollLeft - (x - drag.startX)
   }
   const endDrag = () => {
     if (dragRef.current) dragRef.current.dragging = false
   }
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => handleDragStart(e.pageX)
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => handleDragMove(e.pageX)
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => handleDragStart(e.touches[0].pageX)
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => handleDragMove(e.touches[0].pageX)
 
   if (visiblePackages.length === 0) {
     return (
@@ -114,7 +123,10 @@ export function TaskList({ activePackages, doneToday, onToggle, onGoToPackages }
         onMouseMove={handleMouseMove}
         onMouseUp={endDrag}
         onMouseLeave={endDrag}
-        className="flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={endDrag}
+        className="flex touch-pan-y snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none"
       >
         {visiblePackages.map((pkg) => (
           <div key={pkg.id} className="w-full shrink-0 snap-start px-4 pb-4">

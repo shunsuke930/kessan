@@ -45,10 +45,14 @@
   `gameLogic.ts` の `dateKey`）。深夜0〜4時は前日として扱う。streakの連続判定も
   同じ境目を使う。
 - **部屋グレードの必要pt**（`ROOM_GRADES`）: Grade1=0 / Grade2=50 / Grade3=225 /
-  Grade4=675 / Grade5=1350。「累計ポイント」（history合計＋今日の獲得pt）で
-  判定し、下がることはない。次のグレードまでの残りptと進捗バーは
-  `gameLogic.ts` の `getGradeProgress` が計算し、`GradeProgress.tsx` が
-  ホーム画面の部屋下に常時表示する（Grade5到達時は「最上階に到達」）。
+  Grade4=675 / Grade5(海の見える家)=1200 / Grade6(タワーマンション)=1900。
+  「累計ポイント」（history合計＋今日の獲得pt）で判定し、下がることはない。
+  次のグレードまでの残りptと進捗バーは `gameLogic.ts` の `getGradeProgress`
+  が計算し、`GradeProgress.tsx` がホーム画面の部屋下に常時表示する（Grade6
+  到達時は「最上階に到達」）。累計ポイントは通常時、4パラメータの合計
+  （`getParamSum`）と常に一致する（タスクのcheck/uncheckが`todayEarned`と
+  対応するparamを同じ量だけ増減させるため）。デバッグパネルで上書きしている
+  間だけ意図的に一致しなくなる。
 - **ストリーク倍率**（`STREAK_TIERS`）: 連続日数に応じてタスク獲得ptが
   ×1.0〜×2.0になる。
 - **データのバックアップ**: 設定画面（`SettingsView.tsx`）からJSONの書き出し・
@@ -60,11 +64,17 @@
 （`overflow-x-auto` + `snap-x snap-mandatory` + 各ページ `snap-start`）による
 カルーセル。外部ライブラリは使っていない。
 
-- タッチはブラウザ標準のスクロールに任せ、PC(マウス)向けには
-  `onMouseDown`/`onMouseMove` で `scrollLeft` を追従させるドラッグ実装を
-  追加している（`scroll-snap-type: mandatory` により、指を離す＝マウスを離す
-  と最寄りのページへ自動スナップする）。`touch-action` はあえて指定していない
-  （次項参照）。
+- スクロールコンテナには `touch-action: pan-y` を指定し、縦方向のジェスチャー
+  はブラウザのネイティブ処理（ページの縦スクロール）に明け渡す。その代わり
+  横方向は自前で処理する必要があるため、`onMouseDown`/`onMouseMove`
+  （PC）と `onTouchStart`/`onTouchMove`（タッチ）の両方で同じロジック
+  （`el.scrollLeft`をドラッグ量ぶん動かす）を使っている。
+  `scroll-snap-type: mandatory` により、指/マウスを離すと最寄りのページへ
+  自動スナップする。（`touch-action: pan-y`だけ付けて自前のタッチハンドラを
+  用意しないと、横方向のジェスチャーがブラウザにもJSにも処理されず何も
+  起きなくなる点に注意。ヘッドレスブラウザでCDPレベルの実タッチイベントを
+  使って、横スワイプでカルーセルが切り替わること・カルーセル上での縦スワイプ
+  がページをスクロールすることの両方を確認済み。）
 - 上部にパッケージ名・達成数（例: 3/6）・ドットインジケータを表示し、
   `onScroll` で `scrollLeft / clientWidth` を丸めて現在ページを判定する。
 - 全ページが常にDOMに存在する（アンマウントしない）。
@@ -82,14 +92,6 @@
   積み上がるだけにしている（以前はセクション単位で内部スクロールさせようと
   していたが、`min-h-screen`とFlexboxの`min-height: auto`が絡んで
   ボトムナビごと画面外に押し出されるバグがあったため撤去した）。
-- 横スクロールのカルーセル(`TaskList.tsx`の`overflow-x-auto`)には
-  `touch-action: pan-y`を**付けていない**。実機/ヘッドレスブラウザで検証した
-  結果、`pan-y`を付けるとタッチでの横スワイプ自体が効かなくなる
-  （`touch-action`はそのプロパティの軸のジェスチャーしか許可しないため）。
-  ページの高さが正しく自然に伸びていれば、`touch-action: auto`（デフォルト）
-  のままでもブラウザが「横方向はカルーセル、縦方向はページ」を自動判別して
-  くれる。縦スクロールがカルーセルに奪われる問題の実体は高さの固定（前段落）
-  であり、touch-actionでは無かった。
 - `DebugPanel.tsx`はページ全体がスクロールするようになったため、
   `absolute`ではなく`fixed`（ビューポート基準）に変更している。`absolute`の
   ままだと「カード最下部から◯px」という指定が、タスクが多いときはページの
@@ -100,33 +102,45 @@
 
 ## ドット絵素材
 
-`src/assets/rooms/room_1.png`〜`room_5.png`（768x480、部屋グレード1〜5に対応）と
-`src/assets/chars/char_1.png`〜`char_3.png`（128x224、透過PNG、キャラの段階
-1〜3に対応）を配置すると自動で使われる。`src/assetImages.ts` が
-`import.meta.glob`（**遅延**import。`eager: true` は使わない）でこれらを解決
-していて、ファイルが無い場合は `loadRoomImage`/`loadCharImage` が
-`Promise<null>` を返し、絵文字ベースの表示（`RoomView.tsx`のグラデーション
-背景＋`CHARACTER_STAGES`の絵文字）に自動でフォールバックする。画像未配置でも
+**`public/assets/rooms/` と `public/assets/chars/` に置く**（`src/assets/`
+ではない）。Viteの`public/`配下はビルド時に一切変換されず、ビルド出力の
+ルートにそのままコピーされてルート絶対パスで配信される。かつては
+`src/assets/`に置いて`import.meta.glob`で動的importしていたが、本番で
+壊れた画像アイコンになる不具合があり、`public/`＋絶対パス文字列＋明示的な
+マップという最もシンプルで壊れにくい方式に統一した。パスは
+テンプレート文字列で組み立てず、`src/assetImages.ts` の
+`ROOM_IMAGES`/`ROOM_WAVE_IMAGES`/`ROOM_FLICKER_IMAGES`/`CHAR_IMAGES`という
+明示的なマップ（グレード番号/段階番号→パス文字列）で持つ。マップに無い
+グレード/段階は`null`が返り、`RoomView.tsx`は絵文字ベースの表示
+（グラデーション背景＋`CHARACTER_STAGES`の絵文字）にフォールバックする。
+`public/`はビルド時にファイルの実在チェックをしないため、画像未配置でも
 ビルドは落ちない。
 
-現在表示中のグレード/段階の画像だけを動的import（=そのファイルだけを
-ネットワーク取得）し、他の画像は実際に必要になるまで読み込まない
-（`RoomView.tsx` の `useRoomImage`/`useCharImage`/`useRoomFlickerImage`）。
-読み込みが終わるまでは前の画像（または絵文字フォールバック）をそのまま表示し
-続けるため、グレード変更時のクロスフェードも自然につながる。
+| 種類 | ファイル | 用途 |
+|---|---|---|
+| 部屋 | `room_1.png`〜`room_6.png`（768x480） | 部屋グレード1〜6の背景 |
+| 波 | `room_5_wave_1〜3.png`（768x480、透過） | Grade5(海の見える家)専用、波アニメの3フレーム |
+| 夜景 | `room_6_flicker.png`（768x480、透過） | Grade6(タワーマンション)専用、きらめきレイヤー |
+| キャラ | `char_1.png`〜`char_5.png`（128x224、透過） | キャラの段階1〜5 |
 
 - 部屋グレードの画像切り替えは `RoomView.tsx` 内の `useCrossfadeLayers` で
-  クロスフェードする。
-- キャラの段階（1〜3）は部屋グレードとは独立に、「見た目(look)」パラメータの
-  しきい値（`LOOK_CHAR_STAGE_THRESHOLDS`: 0/30/100）で決まる
-  （`gameLogic.ts` の `getCharStage`）。段階が上がると `Overlay.tsx` の
-  `charStageUp` でメッセージ（`CHAR_STAGE_UP_MESSAGES`）を表示する。
+  クロスフェードする（`getRoomImageSrc`は同期関数なので、動的importの
+  読み込み待ちは無い）。
+- キャラの段階（1〜5）は部屋グレードとは独立に、「見た目(look)」パラメータの
+  しきい値（`LOOK_CHAR_STAGE_THRESHOLDS`: 0/25/60/120/220。段階が増えた分の
+  しきい値は明示的な指定が無かったための暫定値なので、感触を見て調整して
+  よい）で決まる（`gameLogic.ts` の `getCharStage`）。段階が上がると
+  `Overlay.tsx` の `charStageUp` でメッセージ（`CHAR_STAGE_UP_MESSAGES`）を
+  表示する。
 - 画像には必ず `image-rendering: pixelated` を当てている（ぼやけ防止）。
-- **Grade5専用の夜景きらめき**: `src/assets/rooms/room_5_flicker.png`
-  （768x480、透過PNG）を置くと、room_5.pngの上に不規則な周期（`animate-twinkle`、
-  4.5秒ループ）でopacityが揺らぐレイヤーとして重なる。`pointer-events: none`
-  付きでクリックは妨げない。Grade5以外では表示しない
-  （`getRoomFlickerImageSrc`）。
+- **Grade5の波アニメーション**: `room_5_wave_1〜3.png` を
+  `useWaveFrame`（`RoomView.tsx`）で約0.9秒おきに巡回し、
+  `useCrossfadeLayers`で滑らかに切り替える。`prefers-reduced-motion: reduce`
+  のときは巡回を止めて先頭フレーム固定にする。
+- **Grade6の夜景きらめき**: `room_6_flicker.png` を room_6.png の上に
+  不規則な周期（`animate-twinkle`、4.5秒ループ）でopacityが揺らぐレイヤーと
+  して重ねる。`pointer-events: none` 付きでクリックは妨げない。Grade6以外
+  では表示しない（`getRoomFlickerImageSrc`）。
 
 ## キャラの動き
 
@@ -148,16 +162,30 @@
 ## デバッグパネル
 
 `DebugPanel.tsx`。画面右下の🐛ボタンから常時開閉できる（本番ビルドでも表示）。
-累計ポイントの直接入力・部屋グレード1〜5への即切り替えができる。
+累計ポイントの直接入力・部屋グレード1〜6への即切り替えができる。
+
+**上書き値(`debugPointsOverride`)はlocalStorageに保存しない**
+（`useGameState.ts`内の素のReact state。`SaveData`型の一部にしていない）。
+以前は`SaveData`の一部として永続化していたため、デバッグ用に大きい値へ
+上書きした後リロードしても値が残り続け、「実際の進捗は0ptなのに部屋は
+最高グレードのまま」という不具合の原因になっていた。毎回のロードで
+必ず`null`に戻る設計にすることで、この種の不具合を構造的に防いでいる。
 
 ## パフォーマンス / PWA
 
 - 画像には `width`/`height` を明示してレイアウトシフトを防いでいる。
-- `vite-plugin-pwa`（`vite.config.ts`）でオフライン起動・2回目以降の高速化を
-  実現。`registerType: 'autoUpdate'` でService Workerの登録・manifestへの
-  リンクはビルド時に自動注入される（`index.html`を手動編集する必要はない）。
-  `display: 'standalone'` によりホーム画面に追加するとブラウザバーなしで
-  起動する。アイコン（`public/pwa-*.png`）は仮素材なので、実際のブランド
-  アイコンに差し替えるとよい。
+- `vite-plugin-pwa`（`vite.config.ts`）。`display: 'standalone'` により
+  ホーム画面に追加するとブラウザバーなしで起動する。アイコン
+  （`public/pwa-*.png`）は仮素材なので、実際のブランドアイコンに差し替える
+  とよい。
+- **JS/CSS/HTMLはプリキャッシュしない**（`workbox.globPatterns`は画像拡張子
+  のみ）。開発が活発でデプロイ頻度が高い間、app shell(index.html→ハッシュ付き
+  JS)を丸ごとプリキャッシュすると、古いservice workerが古いapp shellを
+  配り続け「直したはずなのに反映されない」不具合の温床になる
+  （実際、複数の不具合報告がこれで説明がつく状態になっていた）。代わりに
+  `runtimeCaching`で`document`/`script`/`style`宛てのリクエストは
+  `NetworkFirst`にし、オンラインなら常に最新を取りに行き、オフライン時のみ
+  直近のキャッシュにフォールバックする。画像は変更頻度が低く重いので、
+  従来どおりプリキャッシュしてオフライン表示に使う。
 - ドット絵PNGは `optipng -o7` でロス無し圧縮済み（画質・透過は変化しない）。
   素材を差し替えたら同様に圧縮しておくと軽量に保てる。

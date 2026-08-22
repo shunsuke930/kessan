@@ -24,7 +24,6 @@ function createEmptySave(today: string): SaveData {
     lastOpenDate: today,
     streak: 0,
     history: [],
-    debugPointsOverride: null,
   }
 }
 
@@ -62,7 +61,6 @@ function loadInitialState(): LoadResult {
       lastOpenDate: parsed.lastOpenDate ?? today,
       streak: parsed.streak ?? 0,
       history: parsed.history ?? [],
-      debugPointsOverride: parsed.debugPointsOverride ?? null,
     }
   } catch {
     return { data: createEmptySave(today), gapDaysAtLoad: 0 }
@@ -101,6 +99,13 @@ export function useGameState() {
   const [state, setState] = useState<SaveData>(loadResult.data)
   /** タスクをチェックする(完了にする)たびに増える。演出のトリガー用でlocalStorageには保存しない */
   const [checkPulse, setCheckPulse] = useState(0)
+  /**
+   * デバッグパネルの累計ポイント上書き。意図的にlocalStorageへ保存しない
+   * (SaveDataの一部にしない)。永続化すると、デバッグ用に設定した値が
+   * リロード後も残り続け、実際の進捗と無関係な部屋グレードが表示され
+   * 続けるバグになるため、毎回のロードで必ずnullに戻す。
+   */
+  const [debugPointsOverride, setDebugPointsOverride] = useState<number | null>(null)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
@@ -154,10 +159,6 @@ export function useGameState() {
     })
   }
 
-  const setDebugPointsOverride = (value: number | null) => {
-    setState((prev) => ({ ...prev, debugPointsOverride: value }))
-  }
-
   const toggleActivePackage = (packageId: string) => {
     setState((prev) => {
       const isActive = prev.activePackages.includes(packageId)
@@ -170,5 +171,13 @@ export function useGameState() {
     })
   }
 
-  return { state, isNeglected, checkPulse, toggleTask, toggleActivePackage, setDebugPointsOverride }
+  return {
+    state,
+    isNeglected,
+    checkPulse,
+    debugPointsOverride,
+    toggleTask,
+    toggleActivePackage,
+    setDebugPointsOverride,
+  }
 }
